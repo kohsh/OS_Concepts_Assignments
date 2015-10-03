@@ -9,7 +9,7 @@ procnanny: $(SRCS) $(INCLUDES)
 	$(CC) $(CFLAGS) $(SRCS) -o procnanny
 	
 clean: 
-	$(RM) procnanny *.o *~ *.out *.log
+	$(RM) procnanny *.o *.out *.log
 	
 run: procnanny
 	./procnanny
