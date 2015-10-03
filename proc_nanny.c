@@ -17,6 +17,10 @@
 
 char* configLines[CONFIG_FILE_LINES] = {NULL};
 Pipe pipes[CONFIG_FILE_LINES];
+
+Pipe totalKilledProccesses;
+Pipe logMessages;
+
 __pid_t childPids[CONFIG_FILE_LINES] = {-1};
 
 int pnMain(int args, char* argv[]) {
@@ -30,6 +34,7 @@ int pnMain(int args, char* argv[]) {
     killAllProcNannys();
     processConfigFile(argv[1]);
     freeConfigLines();
+
     exit(EXIT_SUCCESS);
 }
 
@@ -46,7 +51,6 @@ void killAllProcNannys() {
 }
 
 void processConfigFile(const char *configurationFile) {
-
     FILE * fp;
     char * line = NULL;
     size_t len = 0;
@@ -67,6 +71,14 @@ void processConfigFile(const char *configurationFile) {
 
     unsigned int monitorTime = (unsigned int) atoi(configLines[0]);
 
+    if (pipe(totalKilledProccesses.readWrite) != 0) {
+        exitError("pipe error");
+    }
+
+    if (pipe(logMessages.readWrite) != 0) {
+        exitError("pipe error");
+    }
+
     for (int i = 1; i <CONFIG_FILE_LINES; i++) {
         if (configLines[i] != NULL) {
             childPids[i-1] = forkAndMonitorProcess(configLines[i], monitorTime);
@@ -75,25 +87,9 @@ void processConfigFile(const char *configurationFile) {
         }
     }
 
-    // todo: wait to get pipe results from children and log results
-
-    printf("waiting for child processes\n");
-    fflush(stdout);
-    for (int i = 0; i < CONFIG_FILE_LINES; i++) {
-        if (childPids[i] > 0) {
-            printf("Hello!!1\n");
-            fflush(stdout);
-            int times = 0;
-            while(times < monitorTime*2) {
-                int status;
-                waitpid(childPids[i], &status, WNOHANG);
-                sleep(5);
-                times+=5;
-            }
-        }
-    }
-    printf("child processes done!\n");
-    fflush(stdout);
+    // todo: begin reading pipe results from children -> logMessages and tally the killed processes
+    close(logMessages.readWrite[PIPE_WRITE]);           // don't need to write to the pipe
+    close(totalKilledProccesses.readWrite[PIPE_WRITE]); // don't need to write to the pipe
 
 
 
@@ -108,6 +104,7 @@ __pid_t forkAndMonitorProcess(const char *process, unsigned int monitorTime) {
             exitError("ERROR: error in monitoring process");
             break;
         case 0:     //Child
+            close(logMessages.readWrite[PIPE_READ]);
             monitorProcess(process, monitorTime);
             break;
         default:    //Parent
@@ -125,12 +122,10 @@ void monitorProcess(const char *process, unsigned int monitorTime) {
         if (pids[i] > 0) {
             LogMessage logMsg;
             snprintf(logMsg.message, LOG_MESSAGE_LENGTH,
-                     "Info: Initializing monitoring of process '%s' (PID %d).", process, pids[i]);
+                     "Info: Initializing monitoring of process '%s' (PID %d).\n", process, pids[i]);
             time(&logMsg.time);
-
-            printf("%s\n", logMsg.message);
-            fflush(stdout);
-            /// todo: do something with these messages
+            // todo: integrate time into log messages
+            writeToPipe(&logMessages, logMsg.message);
         }
     }
 
@@ -142,19 +137,19 @@ void monitorProcess(const char *process, unsigned int monitorTime) {
                 kill(pids[i], SIGKILL);
                 LogMessage logMsg;
                 snprintf(logMsg.message, LOG_MESSAGE_LENGTH,
-                         "Action: PID %d (%s) killed after exceeding %d seconds",
+                         "Action: PID %d (%s) killed after exceeding %d seconds.\n",
                          pids[i], process, monitorTime);
                 time(&logMsg.time);
-                printf("%s\n", logMsg.message);
-                fflush(stdout);
-                /// todo: do something with these messages
-
+                // todo: integrate time into log messages
+                writeToPipe(&logMessages, logMsg.message);
                 numberKilledProcesses++;
             }
         }
     }
 
-    //todo: pipe the number of killed process back to the parent process
+    char numberBuffer[20];
+    snprintf(numberBuffer, 19, "%d\n", numberKilledProcesses);
+    writeToPipe(&totalKilledProccesses, numberBuffer);
 
     freeConfigLines();
     exit(EXIT_SUCCESS);
@@ -245,4 +240,8 @@ void getPids(const char *processName, pid_t pids[MAX_PROCESSES]) {
     }
 
     pclose(pgrepOutput);
+}
+
+void writeToPipe(Pipe *pPipe, const char *message) {
+    write(pPipe->readWrite[PIPE_WRITE], message, strlen(message));
 }

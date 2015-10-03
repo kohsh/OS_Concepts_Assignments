@@ -9,14 +9,17 @@
 #define LOG_MESSAGE_LENGTH 512
 #define MAX_PROCESSES 512
 
-typedef struct LogMessage {
-    time_t time;
-    char message[LOG_MESSAGE_LENGTH];
-} LogMessage;
+#define PIPE_READ 0
+#define PIPE_WRITE 1
 
 typedef struct Pipe {
     int readWrite[2]; // read 0, write 1
 } Pipe;
+
+typedef struct LogMessage {
+    time_t time;
+    char message[LOG_MESSAGE_LENGTH];
+} LogMessage;
 
 int pnMain(int argc, char* argv[]);
 
@@ -42,5 +45,7 @@ void exitError(const char* errorMessage);
 void runAndPrint(const char* command);
 
 int getNumberOfLines(FILE* stream);
+
+void writeToPipe(Pipe* pPipe, const char* message);
 
 #endif /* PROC_NANNY_H_ */
