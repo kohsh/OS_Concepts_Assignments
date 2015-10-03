@@ -30,3 +30,9 @@
 
 # Debug files
 *.dSYM/
+
+
+#procnanny specific
+memwatch.log
+procnanny
+.idea/
