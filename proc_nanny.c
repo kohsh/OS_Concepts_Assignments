@@ -8,7 +8,6 @@
 #include <signal.h>
 #include <ctype.h>
 #include <time.h>
-#include <sys/wait.h>
 #include "proc_nanny.h"
 #include "memwatch.h"
 
@@ -23,16 +22,20 @@ int numberChildren = 0;
 int pnMain(int args, char* argv[]) {
 
     if (args <= 1) {
-		fputs("ERROR: No input file indicated as argument.\n", stderr);
-		fflush(stdout);
-		exit(EXIT_FAILURE);
+        exitError("ERROR: No input file indicated as argument.\n");
 	}
 
     char * temp = getenv("PROCNANNYLOGS");
-    snprintf(logLocation, 512, "%s", temp);
+
+    if (temp == NULL) {
+        exitError("ERROR: Environment variable 'PROCNANNYLOGS' not specified.\n");
+    }
+    else {
+        snprintf(logLocation, 512, "%s", temp);
+    }
 
     killAllProcNannys();
-    processConfigFile(argv[1]);
+    beginNanny(argv[1]);
     freeConfigLines();
 
     exit(EXIT_SUCCESS);
@@ -50,7 +53,7 @@ void killAllProcNannys() {
     }
 }
 
-void processConfigFile(const char *configurationFile) {
+void beginNanny(const char *configurationFile) {
     FILE * fp;
     char * line = NULL;
     size_t len = 0;
@@ -79,12 +82,9 @@ void processConfigFile(const char *configurationFile) {
         exitError("pipe error");
     }
 
-    printf("My pid is: %d\n", getpid());
-
-
     for (int i = 1; i <CONFIG_FILE_LINES; i++) {
         if (configLines[i] != NULL) {
-            childPids[i-1] = forkAndMonitorProcess(configLines[i], monitorTime);
+            childPids[i-1] = forkMonitorProcess(configLines[i], monitorTime);
             numberChildren++;
         }
     }
@@ -93,7 +93,7 @@ void processConfigFile(const char *configurationFile) {
     readPipes();
 }
 
-__pid_t forkAndMonitorProcess(const char *process, unsigned int monitorTime) {
+__pid_t forkMonitorProcess(const char *process, unsigned int monitorTime) {
     __pid_t forkResult = fork();
 
     switch(forkResult) {
@@ -176,19 +176,16 @@ void monitorProcess(const char *process, unsigned int monitorTime) {
     close(logMessages.readWrite[WRITE_PIPE]);
 
     char numberBuffer[20];
-    snprintf(numberBuffer, 19, "%d\n", numberKilledProcesses);
+    snprintf(numberBuffer, 20, "%d\n", numberKilledProcesses);
     writeToPipe(&totalKilledProccesses, numberBuffer);
     close(totalKilledProccesses.readWrite[WRITE_PIPE]);
-
 
     freeConfigLines();
     _exit(0);
 }
 
 void writeToPipe(Pipe *pPipe, const char *message) {
-    write(pPipe->readWrite[WRITE_PIPE], message, strlen(message) + 1);
-    printf("%s", message);
-    fflush(stdout);
+    write(pPipe->readWrite[WRITE_PIPE], message, strlen(message));
 }
 
 void readPipes() {
@@ -205,13 +202,31 @@ void readPipes() {
 
     close(logMessages.readWrite[READ_PIPE]);
 
-//    FILE *fp = fdopen(totalKilledProccesses.readWrite[READ_PIPE], "r");
-//    char number[255];
-//    fgets(number, 255, fp);
-//    printf("%s", number);
+    FILE* totFP = fdopen(totalKilledProccesses.readWrite[READ_PIPE], "r");
+    char number[10];
+    int NumbersFound = 0;
+    int integer = 0;
+    while(fgets(number, 10, totFP) != NULL) {
+        sscanf(number, "%d", &integer);
+        NumbersFound+=integer;
+        integer = 0;
+    }
 
-    printf("made it out");
-    fflush(stdout);
+    char timebuffer[50];
+    LogMessage logMsg;
+    time(&logMsg.time);
+    snprintf(timebuffer, 50, "%s", ctime(&logMsg.time));
+    trimWhitespace(timebuffer);
+    snprintf(logMsg.message, LOG_MESSAGE_LENGTH,
+             "[%s] Info: Exiting. %d process(es) killed.\n",
+             timebuffer, NumbersFound);
+    ctime(&logMsg.time);
+
+    FILE* log = fopen(logLocation, "a");
+    fprintf(log, "%s", logMsg.message);
+    fclose(log);
+    fclose(totFP);
+    close(totalKilledProccesses.readWrite[READ_PIPE]);
 }
 
 void exitError(const char *errorMessage) {
