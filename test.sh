@@ -1,5 +1,4 @@
 #! /bin/bash
 
-./test15&
-./test5&
-./procnanny inputFile.txt
+./testproclaunch.sh&
+./procnanny inputFile.txt&

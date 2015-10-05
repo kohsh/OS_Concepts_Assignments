@@ -8,7 +8,6 @@
 #include <signal.h>
 #include <ctype.h>
 #include <time.h>
-#include <sys/types.h>
 #include <sys/wait.h>
 #include "proc_nanny.h"
 #include "memwatch.h"
@@ -16,8 +15,10 @@
 Pipe totalKilledProccesses;
 Pipe logMessages;
 
+char logLocation[512];
 char* configLines[CONFIG_FILE_LINES] = {NULL};
 __pid_t childPids[CONFIG_FILE_LINES] = {-1};
+int numberChildren = 0;
 
 int pnMain(int args, char* argv[]) {
 
@@ -26,6 +27,9 @@ int pnMain(int args, char* argv[]) {
 		fflush(stdout);
 		exit(EXIT_FAILURE);
 	}
+
+    char * temp = getenv("PROCNANNYLOGS");
+    snprintf(logLocation, 512, "%s", temp);
 
     killAllProcNannys();
     processConfigFile(argv[1]);
@@ -75,12 +79,17 @@ void processConfigFile(const char *configurationFile) {
         exitError("pipe error");
     }
 
+    printf("My pid is: %d\n", getpid());
+
+
     for (int i = 1; i <CONFIG_FILE_LINES; i++) {
         if (configLines[i] != NULL) {
             childPids[i-1] = forkAndMonitorProcess(configLines[i], monitorTime);
+            numberChildren++;
         }
     }
-    // todo: begin reading pipe results from children -> log Messages and tally the killed processes
+
+//    todo: begin reading pipe results from children -> log Messages and tally the killed processes
     readPipes();
 }
 
@@ -97,58 +106,89 @@ __pid_t forkAndMonitorProcess(const char *process, unsigned int monitorTime) {
         default:    //Parent
             break;
     }
+
     return forkResult;
 }
 
 void monitorProcess(const char *process, unsigned int monitorTime) {
-
-
-
     close(logMessages.readWrite[READ_PIPE]);
     close(totalKilledProccesses.readWrite[READ_PIPE]);
+
     pid_t pids[MAX_PROCESSES] = {-1};
     getPids(process, pids);
     int numberKilledProcesses = 0;
+    int numberFoundProceses = 0;
+    char timebuffer[50];
 
     for(int i = 0; i < MAX_PROCESSES; i++) {
 
         if (pids[i] > 0) {
             LogMessage logMsg;
-            snprintf(logMsg.message, LOG_MESSAGE_LENGTH,
-                     "Info: Initializing monitoring of process '%s' (PID %d).\n", process, pids[i]);
             time(&logMsg.time);
-            // todo: integrate time into log messages
+            snprintf(timebuffer, 50, "%s", ctime(&logMsg.time));
+            trimWhitespace(timebuffer);
+            snprintf(logMsg.message, LOG_MESSAGE_LENGTH,
+                     "[%s] Info: Initializing monitoring of process '%s' (PID %d).\n",
+                     timebuffer, process, pids[i]);
+            ctime(&logMsg.time);
             writeToPipe(&logMessages, logMsg.message);
+            numberFoundProceses++;
         }
+    }
+
+    if (numberFoundProceses == 0) {
+        LogMessage msg;
+        time(&msg.time);
+        snprintf(timebuffer, 50, "%s", ctime(&msg.time));
+        trimWhitespace(timebuffer);
+        snprintf(msg.message, LOG_MESSAGE_LENGTH, "[%s] Info: No '%s' processes found.\n"
+                ,timebuffer, process);
+        writeToPipe(&logMessages, msg.message);
+        close(logMessages.readWrite[WRITE_PIPE]);
+        close(totalKilledProccesses.readWrite[WRITE_PIPE]);
+        freeConfigLines();
+        _exit(0);
     }
 
     sleep(monitorTime);
 
     for(int i = 0; i < MAX_PROCESSES; i++) {
-        if (pids[i] != -1) {
+
+        if (pids[i] > 0 && pids[i] != getpid()) {
             if(kill(pids[i], 0) == 0) {
+
                 kill(pids[i], SIGKILL);
+
                 LogMessage logMsg;
-                snprintf(logMsg.message, LOG_MESSAGE_LENGTH,
-                         "Action: PID %d (%s) killed after exceeding %d seconds.\n",
-                         pids[i], process, monitorTime);
                 time(&logMsg.time);
-                // todo: integrate time into log messages
+                snprintf(timebuffer, 50, "%s", ctime(&logMsg.time));
+                trimWhitespace(timebuffer);
+
+                snprintf(logMsg.message, LOG_MESSAGE_LENGTH,
+                         "[%s] Action: PID %d (%s) killed after exceeding %d seconds.\n",
+                         timebuffer, pids[i], process, monitorTime);
                 writeToPipe(&logMessages, logMsg.message);
                 numberKilledProcesses++;
             }
         }
     }
 
+    close(logMessages.readWrite[WRITE_PIPE]);
+
     char numberBuffer[20];
     snprintf(numberBuffer, 19, "%d\n", numberKilledProcesses);
     writeToPipe(&totalKilledProccesses, numberBuffer);
+    close(totalKilledProccesses.readWrite[WRITE_PIPE]);
+
+
     freeConfigLines();
-    exit(EXIT_SUCCESS);
+    _exit(0);
 }
 
 void writeToPipe(Pipe *pPipe, const char *message) {
     write(pPipe->readWrite[WRITE_PIPE], message, strlen(message) + 1);
+    printf("%s", message);
+    fflush(stdout);
 }
 
 void readPipes() {
@@ -156,13 +196,22 @@ void readPipes() {
     close(totalKilledProccesses.readWrite[WRITE_PIPE]); // don't need to write to the pipe
 
     char byte;
-    while(read(logMessages.readWrite[READ_PIPE], &byte, 1) == 1) {
-        FILE* log = fopen("log.log", "a");
+
+    while (read(logMessages.readWrite[READ_PIPE], &byte, 1) != 0) {
+        FILE* log = fopen(logLocation, "a");
         fputc(byte, log);
         fclose(log);
-        putc(byte, stdout);
-        fflush(stdout);
     }
+
+    close(logMessages.readWrite[READ_PIPE]);
+
+//    FILE *fp = fdopen(totalKilledProccesses.readWrite[READ_PIPE], "r");
+//    char number[255];
+//    fgets(number, 255, fp);
+//    printf("%s", number);
+
+    printf("made it out");
+    fflush(stdout);
 }
 
 void exitError(const char *errorMessage) {
