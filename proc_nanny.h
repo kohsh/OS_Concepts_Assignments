@@ -8,9 +8,10 @@
 
 #define LOG_MESSAGE_LENGTH 512
 #define MAX_PROCESSES 512
+#define CONFIG_FILE_LINES 128
 
-#define PIPE_READ 0
-#define PIPE_WRITE 1
+#define READ_PIPE 0
+#define WRITE_PIPE 1
 
 typedef struct Pipe {
     int readWrite[2]; // read 0, write 1
@@ -38,14 +39,10 @@ void trimWhitespace(char* str);
 
 void freeConfigLines();
 
-void nannyLog(const char* message);
-
 void exitError(const char* errorMessage);
 
-void runAndPrint(const char* command);
-
-int getNumberOfLines(FILE* stream);
-
 void writeToPipe(Pipe* pPipe, const char* message);
+
+void readPipes();
 
 #endif /* PROC_NANNY_H_ */

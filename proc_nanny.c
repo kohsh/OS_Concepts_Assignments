@@ -13,20 +13,16 @@
 #include "proc_nanny.h"
 #include "memwatch.h"
 
-#define CONFIG_FILE_LINES 128
-
-char* configLines[CONFIG_FILE_LINES] = {NULL};
-Pipe pipes[CONFIG_FILE_LINES];
-
 Pipe totalKilledProccesses;
 Pipe logMessages;
 
+char* configLines[CONFIG_FILE_LINES] = {NULL};
 __pid_t childPids[CONFIG_FILE_LINES] = {-1};
 
 int pnMain(int args, char* argv[]) {
 
     if (args <= 1) {
-		fputs("ERROR: No input file supplied.\n", stderr);
+		fputs("ERROR: No input file indicated as argument.\n", stderr);
 		fflush(stdout);
 		exit(EXIT_FAILURE);
 	}
@@ -68,7 +64,7 @@ void processConfigFile(const char *configurationFile) {
         trimWhitespace(configLines[index]);
         index++;
     }
-
+    fclose(fp);
     unsigned int monitorTime = (unsigned int) atoi(configLines[0]);
 
     if (pipe(totalKilledProccesses.readWrite) != 0) {
@@ -82,18 +78,10 @@ void processConfigFile(const char *configurationFile) {
     for (int i = 1; i <CONFIG_FILE_LINES; i++) {
         if (configLines[i] != NULL) {
             childPids[i-1] = forkAndMonitorProcess(configLines[i], monitorTime);
-            printf("new procnanny: pid=%d\n", childPids[i-1]);
-            fflush(stdout);
         }
     }
-
-    // todo: begin reading pipe results from children -> logMessages and tally the killed processes
-    close(logMessages.readWrite[PIPE_WRITE]);           // don't need to write to the pipe
-    close(totalKilledProccesses.readWrite[PIPE_WRITE]); // don't need to write to the pipe
-
-
-
-    fclose(fp);
+    // todo: begin reading pipe results from children -> log Messages and tally the killed processes
+    readPipes();
 }
 
 __pid_t forkAndMonitorProcess(const char *process, unsigned int monitorTime) {
@@ -104,7 +92,6 @@ __pid_t forkAndMonitorProcess(const char *process, unsigned int monitorTime) {
             exitError("ERROR: error in monitoring process");
             break;
         case 0:     //Child
-            close(logMessages.readWrite[PIPE_READ]);
             monitorProcess(process, monitorTime);
             break;
         default:    //Parent
@@ -114,11 +101,17 @@ __pid_t forkAndMonitorProcess(const char *process, unsigned int monitorTime) {
 }
 
 void monitorProcess(const char *process, unsigned int monitorTime) {
+
+
+
+    close(logMessages.readWrite[READ_PIPE]);
+    close(totalKilledProccesses.readWrite[READ_PIPE]);
     pid_t pids[MAX_PROCESSES] = {-1};
     getPids(process, pids);
     int numberKilledProcesses = 0;
 
     for(int i = 0; i < MAX_PROCESSES; i++) {
+
         if (pids[i] > 0) {
             LogMessage logMsg;
             snprintf(logMsg.message, LOG_MESSAGE_LENGTH,
@@ -150,48 +143,31 @@ void monitorProcess(const char *process, unsigned int monitorTime) {
     char numberBuffer[20];
     snprintf(numberBuffer, 19, "%d\n", numberKilledProcesses);
     writeToPipe(&totalKilledProccesses, numberBuffer);
-
     freeConfigLines();
     exit(EXIT_SUCCESS);
+}
+
+void writeToPipe(Pipe *pPipe, const char *message) {
+    write(pPipe->readWrite[WRITE_PIPE], message, strlen(message) + 1);
+}
+
+void readPipes() {
+    close(logMessages.readWrite[WRITE_PIPE]);           // don't need to write to the pipe
+    close(totalKilledProccesses.readWrite[WRITE_PIPE]); // don't need to write to the pipe
+
+    char byte;
+    while(read(logMessages.readWrite[READ_PIPE], &byte, 1) == 1) {
+        FILE* log = fopen("log.log", "a");
+        fputc(byte, log);
+        fclose(log);
+        putc(byte, stdout);
+        fflush(stdout);
+    }
 }
 
 void exitError(const char *errorMessage) {
     fputs(errorMessage, stderr);
     exit(EXIT_FAILURE);
-}
-
-void runAndPrint(const char* command) {
-    FILE* in = popen(command, "r");
-    char buff[2048];
-
-    if (in == NULL) {
-        pclose(in);
-        return;
-    }
-
-    while(fgets(buff, sizeof(buff), in)!=NULL){
-        printf("%s", buff);
-    }
-    pclose(in);
-}
-
-int getNumberOfLines(FILE *stream) {
-    int character = fgetc(stream);
-    int lines = 0;
-
-    while (character != EOF) {
-        if (character == '\n') {
-            lines++;
-        }
-        character = fgetc(stream);
-    }
-
-    return lines;
-}
-
-void nannyLog(const char *message) {
-    printf("%s", message);
-    fflush(stdout);
 }
 
 void trimWhitespace(char *str) {
@@ -242,6 +218,4 @@ void getPids(const char *processName, pid_t pids[MAX_PROCESSES]) {
     pclose(pgrepOutput);
 }
 
-void writeToPipe(Pipe *pPipe, const char *message) {
-    write(pPipe->readWrite[PIPE_WRITE], message, strlen(message));
-}
+
