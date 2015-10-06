@@ -280,16 +280,34 @@ void getCurrentTime(char *buffer) {
 }
 
 void checkInputs(int args, char* argv[]) {
-    if (args <= 1) {
-        exitError("ERROR: No input file indicated as argument.\n");
-    }
-
     char * temp = getenv("PROCNANNYLOGS");
 
     if (temp == NULL) {
-        exitError("ERROR: Environment variable 'PROCNANNYLOGS' not specified.\n");
+        snprintf(logLocation, 512, "./procnanny.log");
+        char timebuffer[TIME_BUFFER_SIZE];
+        getCurrentTime(timebuffer);
+        LogMessage logMsg;
+        snprintf(logMsg.message, LOG_MESSAGE_LENGTH,
+                 "[%s] Error: Environment variable 'PROCNANNYLOGS' not specified.\n",
+                 timebuffer);
+        FILE* log = fopen(logLocation, "a");
+        fprintf(log, "%s", logMsg.message);
+        fclose(log);
     }
     else {
         snprintf(logLocation, 512, "%s", temp);
+    }
+
+    if (args <= 1) {
+        char timebuffer[TIME_BUFFER_SIZE];
+        getCurrentTime(timebuffer);
+        LogMessage logMsg;
+        snprintf(logMsg.message, LOG_MESSAGE_LENGTH,
+                 "[%s] Error: procnanny configuration file not provided as argument.\n",
+                 timebuffer);
+        FILE* log = fopen(logLocation, "a");
+        fprintf(log, "%s", logMsg.message);
+        fclose(log);
+        exit(EXIT_FAILURE);
     }
 }
