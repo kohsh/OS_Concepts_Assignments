@@ -1,4 +1,4 @@
 #! /bin/bash
 
 ./testproclaunch.sh&
-./procnanny inputFile.txt&
+PROCNANNYLOGS="./log.log" ./procnanny inputFile.txt&
