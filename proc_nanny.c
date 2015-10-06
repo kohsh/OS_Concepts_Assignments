@@ -275,7 +275,7 @@ void getCurrentTime(char *buffer) {
     struct tm *timeInfo;
     time (&rawTime);
     timeInfo = localtime (&rawTime);
-    strftime(buffer,TIME_BUFFER_SIZE,"%a %b %d %H:%M:%S %h %Y", timeInfo);
+    strftime(buffer,TIME_BUFFER_SIZE,"%a %b %d %H:%M:%S %Z %Y", timeInfo);
     trimWhitespace(buffer);
 }
 
