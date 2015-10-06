@@ -113,28 +113,28 @@ void monitorProcess(const char *process, unsigned int monitorTime) {
     pid_t processPids[MAX_PROCESSES] = {-1};
     getPids(process, processPids);
     int numberKilledProcesses = 0;
-    int numberFoundProceses = 0;
+    int numberFoundProcesses = 0;
 
     for(int i = 0; i < MAX_PROCESSES; i++) {
 
         if (processPids[i] > 0) {
-            char timebuffer[TIME_BUFFER_SIZE];
-            getCurrentTime(timebuffer);
+            char timeBuffer[TIME_BUFFER_SIZE];
+            getCurrentTime(timeBuffer);
             LogMessage logMsg;
             snprintf(logMsg.message, LOG_MESSAGE_LENGTH,
                      "[%s] Info: Initializing monitoring of process '%s' (PID %d).\n",
-                     timebuffer, process, processPids[i]);
+                     timeBuffer, process, processPids[i]);
             writeToPipe(&logMessages, logMsg.message);
-            numberFoundProceses++;
+            numberFoundProcesses++;
         }
     }
 
-    if (numberFoundProceses == 0) {
-        char timebuffer[TIME_BUFFER_SIZE];
-        getCurrentTime(timebuffer);
+    if (numberFoundProcesses == 0) {
+        char timeBuffer[TIME_BUFFER_SIZE];
+        getCurrentTime(timeBuffer);
         LogMessage msg;
         snprintf(msg.message, LOG_MESSAGE_LENGTH, "[%s] Info: No '%s' processes found.\n"
-                ,timebuffer, process);
+                , timeBuffer, process);
         writeToPipe(&logMessages, msg.message);
         close(logMessages.readWrite[WRITE_PIPE]);
         close(totalKilledProcesses.readWrite[WRITE_PIPE]);
@@ -149,13 +149,13 @@ void monitorProcess(const char *process, unsigned int monitorTime) {
         if (processPids[i] > 0 && processPids[i] != getpid()) {
             if(kill(processPids[i], 0) == 0) {
                 kill(processPids[i], SIGKILL);
-                char timebuffer[TIME_BUFFER_SIZE];
-                getCurrentTime(timebuffer);
+                char timeBuffer[TIME_BUFFER_SIZE];
+                getCurrentTime(timeBuffer);
                 LogMessage logMsg;
 
                 snprintf(logMsg.message, LOG_MESSAGE_LENGTH,
                          "[%s] Action: PID %d (%s) killed after exceeding %d seconds.\n",
-                         timebuffer, processPids[i], process, monitorTime);
+                         timeBuffer, processPids[i], process, monitorTime);
                 writeToPipe(&logMessages, logMsg.message);
                 numberKilledProcesses++;
             }
@@ -191,11 +191,11 @@ void readPipes() {
     fclose(log);
     close(logMessages.readWrite[READ_PIPE]);
 
-    FILE* totFP = fdopen(totalKilledProcesses.readWrite[READ_PIPE], "r");
+    FILE*totalKilledFP = fdopen(totalKilledProcesses.readWrite[READ_PIPE], "r");
     char numberString[10];
     int numberInteger = 0;
     int processesKilled = 0;
-    while(fgets(numberString, 10, totFP) != NULL) {
+    while(fgets(numberString, 10, totalKilledFP) != NULL) {
         sscanf(numberString, "%d", &numberInteger);
         processesKilled += numberInteger;
         numberInteger = 0;
@@ -211,7 +211,7 @@ void readPipes() {
     log = fopen(logLocation, "a");
     fprintf(log, "%s", logMsg.message);
     fclose(log);
-    fclose(totFP);
+    fclose(totalKilledFP);
     close(totalKilledProcesses.readWrite[READ_PIPE]);
 }
 
@@ -271,11 +271,11 @@ void getPids(const char *processName, pid_t pids[MAX_PROCESSES]) {
 }
 
 void getCurrentTime(char *buffer) {
-    time_t rawtime;
-    struct tm * timeinfo;
-    time (&rawtime);
-    timeinfo = localtime (&rawtime);
-    strftime(buffer,TIME_BUFFER_SIZE,"%a %b %d %H:%M:%S %h %Y", timeinfo);
+    time_t rawTime;
+    struct tm *timeInfo;
+    time (&rawTime);
+    timeInfo = localtime (&rawTime);
+    strftime(buffer,TIME_BUFFER_SIZE,"%a %b %d %H:%M:%S %h %Y", timeInfo);
     trimWhitespace(buffer);
 }
 
