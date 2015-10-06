@@ -35,17 +35,16 @@ typedef struct Pipe {
 } Pipe;
 
 typedef struct LogMessage {
-    time_t time;
     char message[LOG_MESSAGE_LENGTH];
 } LogMessage;
 
 int pnMain(int argc, char* argv[]);
 
-__pid_t forkMonitorProcess(const char *process, unsigned int monitorTime);
 
 void beginProcNanny(const char *configurationFile);
 void checkInputs(int args, char* argv[]);
 void exitError(const char* errorMessage);
+void forkMonitorProcess(const char *process, unsigned int monitorTime);
 void freeConfigLines();
 void getCurrentTime(char* buffer);
 void getPids(const char* processName, pid_t pids[MAX_PROCESSES]);

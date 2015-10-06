@@ -27,13 +27,11 @@
 #include "proc_nanny.h"
 #include "memwatch.h"
 
-Pipe totalKilledProccesses;
+Pipe totalKilledProcesses;
 Pipe logMessages;
 
 char logLocation[512];
 char* configLines[CONFIG_FILE_LINES] = {NULL};
-__pid_t childPids[CONFIG_FILE_LINES] = {-1};
-int numberChildren = 0;
 
 int pnMain(int args, char* argv[]) {
     checkInputs(args, argv);
@@ -76,7 +74,7 @@ void beginProcNanny(const char *configurationFile) {
     fclose(fp);
     unsigned int monitorTime = (unsigned int) atoi(configLines[0]);
 
-    if (pipe(totalKilledProccesses.readWrite) != 0) {
+    if (pipe(totalKilledProcesses.readWrite) != 0) {
         exitError("pipe error");
     }
 
@@ -86,16 +84,14 @@ void beginProcNanny(const char *configurationFile) {
 
     for (int i = 1; i <CONFIG_FILE_LINES; i++) {
         if (configLines[i] != NULL) {
-            childPids[i-1] = forkMonitorProcess(configLines[i], monitorTime);
-            numberChildren++;
+            forkMonitorProcess(configLines[i], monitorTime);
         }
     }
 
-//    todo: begin reading pipe results from children -> log Messages and tally the killed processes
     readPipes();
 }
 
-__pid_t forkMonitorProcess(const char *process, unsigned int monitorTime) {
+void forkMonitorProcess(const char *process, unsigned int monitorTime) {
     __pid_t forkResult = fork();
 
     switch(forkResult) {
@@ -108,29 +104,26 @@ __pid_t forkMonitorProcess(const char *process, unsigned int monitorTime) {
         default:    //Parent
             break;
     }
-
-    return forkResult;
 }
 
 void monitorProcess(const char *process, unsigned int monitorTime) {
     close(logMessages.readWrite[READ_PIPE]);
-    close(totalKilledProccesses.readWrite[READ_PIPE]);
+    close(totalKilledProcesses.readWrite[READ_PIPE]);
 
-    pid_t pids[MAX_PROCESSES] = {-1};
-    getPids(process, pids);
+    pid_t processPids[MAX_PROCESSES] = {-1};
+    getPids(process, processPids);
     int numberKilledProcesses = 0;
     int numberFoundProceses = 0;
 
     for(int i = 0; i < MAX_PROCESSES; i++) {
 
-        if (pids[i] > 0) {
+        if (processPids[i] > 0) {
             char timebuffer[TIME_BUFFER_SIZE];
             getCurrentTime(timebuffer);
             LogMessage logMsg;
             snprintf(logMsg.message, LOG_MESSAGE_LENGTH,
                      "[%s] Info: Initializing monitoring of process '%s' (PID %d).\n",
-                     timebuffer, process, pids[i]);
-            ctime(&logMsg.time);
+                     timebuffer, process, processPids[i]);
             writeToPipe(&logMessages, logMsg.message);
             numberFoundProceses++;
         }
@@ -144,7 +137,7 @@ void monitorProcess(const char *process, unsigned int monitorTime) {
                 ,timebuffer, process);
         writeToPipe(&logMessages, msg.message);
         close(logMessages.readWrite[WRITE_PIPE]);
-        close(totalKilledProccesses.readWrite[WRITE_PIPE]);
+        close(totalKilledProcesses.readWrite[WRITE_PIPE]);
         freeConfigLines();
         _exit(0);
     }
@@ -153,16 +146,16 @@ void monitorProcess(const char *process, unsigned int monitorTime) {
 
     for(int i = 0; i < MAX_PROCESSES; i++) {
 
-        if (pids[i] > 0 && pids[i] != getpid()) {
-            if(kill(pids[i], 0) == 0) {
-                kill(pids[i], SIGKILL);
+        if (processPids[i] > 0 && processPids[i] != getpid()) {
+            if(kill(processPids[i], 0) == 0) {
+                kill(processPids[i], SIGKILL);
                 char timebuffer[TIME_BUFFER_SIZE];
                 getCurrentTime(timebuffer);
                 LogMessage logMsg;
 
                 snprintf(logMsg.message, LOG_MESSAGE_LENGTH,
                          "[%s] Action: PID %d (%s) killed after exceeding %d seconds.\n",
-                         timebuffer, pids[i], process, monitorTime);
+                         timebuffer, processPids[i], process, monitorTime);
                 writeToPipe(&logMessages, logMsg.message);
                 numberKilledProcesses++;
             }
@@ -173,8 +166,8 @@ void monitorProcess(const char *process, unsigned int monitorTime) {
 
     char numberBuffer[20];
     snprintf(numberBuffer, 20, "%d\n", numberKilledProcesses);
-    writeToPipe(&totalKilledProccesses, numberBuffer);
-    close(totalKilledProccesses.readWrite[WRITE_PIPE]);
+    writeToPipe(&totalKilledProcesses, numberBuffer);
+    close(totalKilledProcesses.readWrite[WRITE_PIPE]);
 
     freeConfigLines();
     _exit(0);
@@ -186,7 +179,7 @@ void writeToPipe(Pipe *pPipe, const char *message) {
 
 void readPipes() {
     close(logMessages.readWrite[WRITE_PIPE]);           // don't need to write to the pipe
-    close(totalKilledProccesses.readWrite[WRITE_PIPE]); // don't need to write to the pipe
+    close(totalKilledProcesses.readWrite[WRITE_PIPE]); // don't need to write to the pipe
 
     char byte;
     FILE* log = fopen(logLocation, "a");
@@ -198,14 +191,14 @@ void readPipes() {
     fclose(log);
     close(logMessages.readWrite[READ_PIPE]);
 
-    FILE* totFP = fdopen(totalKilledProccesses.readWrite[READ_PIPE], "r");
-    char number[10];
-    int NumbersFound = 0;
-    int integer = 0;
-    while(fgets(number, 10, totFP) != NULL) {
-        sscanf(number, "%d", &integer);
-        NumbersFound+=integer;
-        integer = 0;
+    FILE* totFP = fdopen(totalKilledProcesses.readWrite[READ_PIPE], "r");
+    char numberString[10];
+    int numberInteger = 0;
+    int processesKilled = 0;
+    while(fgets(numberString, 10, totFP) != NULL) {
+        sscanf(numberString, "%d", &numberInteger);
+        processesKilled += numberInteger;
+        numberInteger = 0;
     }
 
     char timebuffer[TIME_BUFFER_SIZE];
@@ -213,13 +206,13 @@ void readPipes() {
     LogMessage logMsg;
     snprintf(logMsg.message, LOG_MESSAGE_LENGTH,
              "[%s] Info: Exiting. %d process(es) killed.\n",
-             timebuffer, NumbersFound);
+             timebuffer, processesKilled);
 
     log = fopen(logLocation, "a");
     fprintf(log, "%s", logMsg.message);
     fclose(log);
     fclose(totFP);
-    close(totalKilledProccesses.readWrite[READ_PIPE]);
+    close(totalKilledProcesses.readWrite[READ_PIPE]);
 }
 
 void freeConfigLines() {
@@ -241,17 +234,19 @@ void trimWhitespace(char *str) {
     int begin = 0;
     size_t end = strlen(str) - 1;
 
-    while (isspace(str[begin]))
+    while (isspace(str[begin])) {
         begin++;
+    }
 
-    while ((end >= begin) && isspace(str[end]))
+    while ((end >= begin) && isspace(str[end])) {
         end--;
+    }
 
-    // Shift all characters back to the start of the string array.
-    for (i = begin; i <= end; i++)
+    for (i = begin; i <= end; i++) {
         str[i - begin] = str[i];
+    }
 
-    str[i - begin] = '\0'; // Null terminate string.
+    str[i - begin] = '\0';
 
 }
 
