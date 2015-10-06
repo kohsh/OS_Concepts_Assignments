@@ -17,8 +17,7 @@ TA: Marcus Karpoff
   
 #How to run  
 
-* set the enironment variable PROCNANNYLOGS  
 * create an input file with the first line being the monitor time and all consecutive lines being monitored processes  
-* run"./procnanny inputFile  
+* run "PROCNANNYLOGS="log_file_location"./procnanny inputFile"  
 
 
