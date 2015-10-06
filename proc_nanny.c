@@ -20,24 +20,10 @@ __pid_t childPids[CONFIG_FILE_LINES] = {-1};
 int numberChildren = 0;
 
 int pnMain(int args, char* argv[]) {
-
-    if (args <= 1) {
-        exitError("ERROR: No input file indicated as argument.\n");
-	}
-
-    char * temp = getenv("PROCNANNYLOGS");
-
-    if (temp == NULL) {
-        exitError("ERROR: Environment variable 'PROCNANNYLOGS' not specified.\n");
-    }
-    else {
-        snprintf(logLocation, 512, "%s", temp);
-    }
-
+    checkInputs(args, argv);
     killAllProcNannys();
-    beginNanny(argv[1]);
+    beginProcNanny(argv[1]);
     freeConfigLines();
-
     exit(EXIT_SUCCESS);
 }
 
@@ -53,7 +39,7 @@ void killAllProcNannys() {
     }
 }
 
-void beginNanny(const char *configurationFile) {
+void beginProcNanny(const char *configurationFile) {
     FILE * fp;
     char * line = NULL;
     size_t len = 0;
@@ -118,15 +104,13 @@ void monitorProcess(const char *process, unsigned int monitorTime) {
     getPids(process, pids);
     int numberKilledProcesses = 0;
     int numberFoundProceses = 0;
-    char timebuffer[50];
 
     for(int i = 0; i < MAX_PROCESSES; i++) {
 
         if (pids[i] > 0) {
+            char timebuffer[TIME_BUFFER_SIZE];
+            getCurrentTime(timebuffer);
             LogMessage logMsg;
-            time(&logMsg.time);
-            snprintf(timebuffer, 50, "%s", ctime(&logMsg.time));
-            trimWhitespace(timebuffer);
             snprintf(logMsg.message, LOG_MESSAGE_LENGTH,
                      "[%s] Info: Initializing monitoring of process '%s' (PID %d).\n",
                      timebuffer, process, pids[i]);
@@ -137,10 +121,9 @@ void monitorProcess(const char *process, unsigned int monitorTime) {
     }
 
     if (numberFoundProceses == 0) {
+        char timebuffer[TIME_BUFFER_SIZE];
+        getCurrentTime(timebuffer);
         LogMessage msg;
-        time(&msg.time);
-        snprintf(timebuffer, 50, "%s", ctime(&msg.time));
-        trimWhitespace(timebuffer);
         snprintf(msg.message, LOG_MESSAGE_LENGTH, "[%s] Info: No '%s' processes found.\n"
                 ,timebuffer, process);
         writeToPipe(&logMessages, msg.message);
@@ -156,13 +139,10 @@ void monitorProcess(const char *process, unsigned int monitorTime) {
 
         if (pids[i] > 0 && pids[i] != getpid()) {
             if(kill(pids[i], 0) == 0) {
-
                 kill(pids[i], SIGKILL);
-
+                char timebuffer[TIME_BUFFER_SIZE];
+                getCurrentTime(timebuffer);
                 LogMessage logMsg;
-                time(&logMsg.time);
-                snprintf(timebuffer, 50, "%s", ctime(&logMsg.time));
-                trimWhitespace(timebuffer);
 
                 snprintf(logMsg.message, LOG_MESSAGE_LENGTH,
                          "[%s] Action: PID %d (%s) killed after exceeding %d seconds.\n",
@@ -193,13 +173,13 @@ void readPipes() {
     close(totalKilledProccesses.readWrite[WRITE_PIPE]); // don't need to write to the pipe
 
     char byte;
+    FILE* log = fopen(logLocation, "a");
 
     while (read(logMessages.readWrite[READ_PIPE], &byte, 1) != 0) {
-        FILE* log = fopen(logLocation, "a");
         fputc(byte, log);
-        fclose(log);
     }
 
+    fclose(log);
     close(logMessages.readWrite[READ_PIPE]);
 
     FILE* totFP = fdopen(totalKilledProccesses.readWrite[READ_PIPE], "r");
@@ -212,21 +192,27 @@ void readPipes() {
         integer = 0;
     }
 
-    char timebuffer[50];
+    char timebuffer[TIME_BUFFER_SIZE];
+    getCurrentTime(timebuffer);
     LogMessage logMsg;
-    time(&logMsg.time);
-    snprintf(timebuffer, 50, "%s", ctime(&logMsg.time));
-    trimWhitespace(timebuffer);
     snprintf(logMsg.message, LOG_MESSAGE_LENGTH,
              "[%s] Info: Exiting. %d process(es) killed.\n",
              timebuffer, NumbersFound);
-    ctime(&logMsg.time);
 
-    FILE* log = fopen(logLocation, "a");
+    log = fopen(logLocation, "a");
     fprintf(log, "%s", logMsg.message);
     fclose(log);
     fclose(totFP);
     close(totalKilledProccesses.readWrite[READ_PIPE]);
+}
+
+void freeConfigLines() {
+    for (int i = 0; i < CONFIG_FILE_LINES; i++) {
+        if (configLines[i] != NULL) {
+            free(configLines[i]);
+            configLines[i] = NULL;
+        }
+    }
 }
 
 void exitError(const char *errorMessage) {
@@ -253,15 +239,6 @@ void trimWhitespace(char *str) {
 
 }
 
-void freeConfigLines() {
-    for (int i = 0; i < CONFIG_FILE_LINES; i++) {
-        if (configLines[i] != NULL) {
-            free(configLines[i]);
-            configLines[i] = NULL;
-        }
-    }
-}
-
 void getPids(const char *processName, pid_t pids[MAX_PROCESSES]) {
     char command[512];
     snprintf(command, 511, "pgrep '%s'", processName);
@@ -282,4 +259,26 @@ void getPids(const char *processName, pid_t pids[MAX_PROCESSES]) {
     pclose(pgrepOutput);
 }
 
+void getCurrentTime(char *buffer) {
+    time_t rawtime;
+    struct tm * timeinfo;
+    time (&rawtime);
+    timeinfo = localtime (&rawtime);
+    strftime(buffer,TIME_BUFFER_SIZE,"%a %b %d %H:%M:%S %h %Y", timeinfo);
+    trimWhitespace(buffer);
+}
 
+void checkInputs(int args, char* argv[]) {
+    if (args <= 1) {
+        exitError("ERROR: No input file indicated as argument.\n");
+    }
+
+    char * temp = getenv("PROCNANNYLOGS");
+
+    if (temp == NULL) {
+        exitError("ERROR: Environment variable 'PROCNANNYLOGS' not specified.\n");
+    }
+    else {
+        snprintf(logLocation, 512, "%s", temp);
+    }
+}

@@ -9,6 +9,7 @@
 #define MAX_PROCESSES 1024
 #define CONFIG_FILE_LINES 256
 #define LOG_MESSAGE_LENGTH 512
+#define TIME_BUFFER_SIZE 40
 
 #define READ_PIPE 0
 #define WRITE_PIPE 1
@@ -24,16 +25,18 @@ typedef struct LogMessage {
 
 int pnMain(int argc, char* argv[]);
 
-void killAllProcNannys();
-void beginNanny(const char *configurationFile);
-void getPids(const char* processName, pid_t pids[MAX_PROCESSES]);
-void monitorProcess(const char *process, unsigned int monitorTime);
-void trimWhitespace(char* str);
-void freeConfigLines();
-void exitError(const char* errorMessage);
-void writeToPipe(Pipe* pPipe, const char* message);
-void readPipes();
-
 __pid_t forkMonitorProcess(const char *process, unsigned int monitorTime);
+
+void beginProcNanny(const char *configurationFile);
+void checkInputs(int args, char* argv[]);
+void exitError(const char* errorMessage);
+void freeConfigLines();
+void getCurrentTime(char* buffer);
+void getPids(const char* processName, pid_t pids[MAX_PROCESSES]);
+void killAllProcNannys();
+void monitorProcess(const char *process, unsigned int monitorTime);
+void readPipes();
+void trimWhitespace(char* str);
+void writeToPipe(Pipe* pPipe, const char* message);
 
 #endif /* PROC_NANNY_H_ */
