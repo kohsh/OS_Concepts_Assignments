@@ -13,3 +13,6 @@ clean:
 	
 run: procnanny
 	./procnanny
+
+tar:
+	tar cfv submit.tar Makefile main.c proc_nanny.c proc_nanny.h
