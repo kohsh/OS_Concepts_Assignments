@@ -33,6 +33,6 @@
 
 
 #procnanny specific
-memwatch.log
+*.log
 procnanny
 .idea/
