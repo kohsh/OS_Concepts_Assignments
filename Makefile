@@ -9,10 +9,19 @@ procnanny: $(SRCS) $(INCLUDES)
 	$(CC) $(CFLAGS) $(SRCS) -o procnanny
 	
 clean: 
-	$(RM) procnanny *.o *.out *.log *.tar
+	$(RM) procnanny test15 test5 *.o *.out *.log *.tar
 	
-run: procnanny
-	./procnanny
+test: procnanny test5 test15
+	chmod +x launchTestProcesses.sh
+	./launchTestProcesses.sh&
+	PROCNANNYLOGS="./pn.log" ./procnanny testInput.config
+	cat pn.log
+
+test5: test5.c
+	gcc -o test5 test5.c
+
+test15: test15.c
+	gcc -o test15 test15.c
 
 tar:
 	tar cfv submit.tar Makefile main.c proc_nanny.c proc_nanny.h
