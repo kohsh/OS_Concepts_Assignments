@@ -20,5 +20,5 @@ TA: Marcus Karpoff
 #How to run  
 * Create an input file with the first line being the monitor time (numeric) and all consecutive lines being monitored programs to monitor  
 * Run `PROCNANNYLOGS="log_file_location"./procnanny inputFile.config`  
-* If a user fails to set the PROCNANNYLOGS environment variable, a log will be created for them at `./procnanny.log`  
+* If a user fails to set the `PROCNANNYLOGS` environment variable, a log will be created for them at `./procnanny.log`  
 * If a user fails to provide a procnanny configuration file they will provided an appropriate error in the log. `procnanny` will also return with a code of 1.  
