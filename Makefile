@@ -24,4 +24,4 @@ test15: test15.c
 	gcc -o test15 test15.c
 
 tar:
-	tar cfv submit.tar Makefile main.c proc_nanny.c proc_nanny.h
+	tar cfv submit.tar README.md Makefile main.c proc_nanny.c proc_nanny.h
