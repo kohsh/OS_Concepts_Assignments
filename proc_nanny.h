@@ -48,6 +48,7 @@ void forkMonitorProcess(const char *process, unsigned int monitorTime);
 void freeConfigLines();
 void getCurrentTime(char* buffer);
 void getPids(const char* processName, pid_t pids[MAX_PROCESSES]);
+void killPid(pid_t pid);
 void killAllProcNannys();
 void monitorProcess(const char *process, unsigned int monitorTime);
 void readPipes();

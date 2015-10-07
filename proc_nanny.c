@@ -47,7 +47,7 @@ void killAllProcNannys() {
     for(int i = 0; i < MAX_PROCESSES; i++) {
         if (pids[i] > 0 && pids[i] != getpid()) {
             if(kill(pids[i], 0) == 0) {
-                kill(pids[i], SIGKILL);
+                killPid(pids[i]);
             }
         }
     }
@@ -148,7 +148,7 @@ void monitorProcess(const char *process, unsigned int monitorTime) {
 
         if (processPids[i] > 0 && processPids[i] != getpid()) {
             if(kill(processPids[i], 0) == 0) {
-                kill(processPids[i], SIGKILL);
+                killPid(processPids[i]);
                 char timeBuffer[TIME_BUFFER_SIZE];
                 getCurrentTime(timeBuffer);
                 LogMessage logMsg;
@@ -310,4 +310,10 @@ void checkInputs(int args, char* argv[]) {
         fclose(log);
         exit(EXIT_FAILURE);
     }
+}
+
+void killPid(pid_t pid) {
+    char buff[256];
+    snprintf(buff, 256, "kill -9 %d >> /dev/null", pid);
+    system(buff);
 }
