@@ -31,26 +31,26 @@
 #define READ_PIPE 0
 #define WRITE_PIPE 1
 
-typedef struct Pipe {
+typedef struct _Pipe {
     int readWrite[2]; // read 0, write 1
 } Pipe;
 
-typedef struct LogMessage {
+typedef struct _LogMessage {
     char message[LOG_MESSAGE_LENGTH];
 } LogMessage;
 
-typedef struct ProgramConfig {
+typedef struct _ProgramConfig {
     char programName[PROGRAM_NAME_LENGTH];
     int runtime;
 } ProgramConfig;
 
-typedef struct ChildProcess {
+typedef struct _ChildProcess {
     pid_t childPid;
     Pipe toParent;
     Pipe toChild;
 } ChildProcess;
 
-typedef struct MonitoredProcess {
+typedef struct _MonitoredProcess {
     pid_t processPid;
     char processName[PROGRAM_NAME_LENGTH];
 } MonitoredProcess;
