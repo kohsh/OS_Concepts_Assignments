@@ -26,6 +26,7 @@
 #define CONFIG_FILE_LINES 256
 #define LOG_MESSAGE_LENGTH 512
 #define TIME_BUFFER_SIZE 40
+#define PROGRAM_NAME_LENGTH 128
 
 #define READ_PIPE 0
 #define WRITE_PIPE 1
@@ -38,8 +39,24 @@ typedef struct LogMessage {
     char message[LOG_MESSAGE_LENGTH];
 } LogMessage;
 
-int pnMain(int argc, char* argv[]);
+typedef struct ProgramConfig {
+    char programName[PROGRAM_NAME_LENGTH];
+    int runtime;
+} ProgramConfig;
 
+typedef struct ChildProcess {
+    pid_t childPid;
+    Pipe toParent;
+    Pipe toChild;
+} ChildProcess;
+
+typedef struct MonitoredProcess {
+    pid_t processPid;
+    char processName[PROGRAM_NAME_LENGTH];
+} MonitoredProcess;
+
+
+int pnMain(int argc, char* argv[]);
 
 void beginProcNanny(const char *configurationFile);
 void checkInputs(int args, char* argv[]);
