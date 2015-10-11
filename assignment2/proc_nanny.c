@@ -310,6 +310,19 @@ void checkInputs(int args, char* argv[]) {
         fclose(log);
         exit(EXIT_FAILURE);
     }
+
+    if (access(argv[1], R_OK) == -1) {
+        char timebuffer[TIME_BUFFER_SIZE];
+        getCurrentTime(timebuffer);
+        LogMessage logMsg;
+        snprintf(logMsg.message, LOG_MESSAGE_LENGTH,
+                 "[%s] Error: Unable to read from configuration file (%s).\n",
+                 timebuffer, argv[1]);
+        FILE* log = fopen(logLocation, "a");
+        fprintf(log, "%s", logMsg.message);
+        fclose(log);
+        exit(EXIT_FAILURE);
+    }
 }
 
 void killPid(pid_t pid) {
