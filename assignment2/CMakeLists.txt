@@ -8,6 +8,8 @@ set(SOURCE_FILES
     memwatch.c
     memwatch.h
     proc_nanny.c
-    proc_nanny.h)
+    proc_nanny.h
+    linked_list.h
+    linked_list.c)
 
 add_executable(ProcNanny ${SOURCE_FILES})

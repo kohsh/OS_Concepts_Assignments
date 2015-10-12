@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef PROC_NANNY_H_
-#define PROC_NANNY_H_
+#ifndef PROC_NANNY_H
+#define PROC_NANNY_H
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -72,4 +72,4 @@ void readPipes();
 void trimWhitespace(char* str);
 void writeToPipe(Pipe* pPipe, const char* message);
 
-#endif /* PROC_NANNY_H_ */
+#endif //PROC_NANNY_H

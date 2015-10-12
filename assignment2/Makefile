@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS  = -std=c99 -Wall -DMEMWATCH -DMW_STDIO
-SRCS = main.c memwatch.c proc_nanny.c
-INCLUDES = proc_nanny.h memwatch.h
+SRCS = main.c memwatch.c proc_nanny.c linked_list.c
+INCLUDES = proc_nanny.h memwatch.h linked_list.h
 
 all: procnanny
 
