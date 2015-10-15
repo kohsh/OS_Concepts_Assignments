@@ -82,6 +82,7 @@ void ll_removeIf(List *list, Predicate operation) {
 
             free(temp->data);
             free(temp);
+            list->length--;
         }
         else {
             previousNode = node;
