@@ -97,10 +97,6 @@ void beginProcNanny() {
 
     ll_init(&monitoredProccesses, sizeof(MonitoredProcess));
 
-    //given the configuration lines, find all processes matching the program names (use getPids)
-    //and delegate these off to new instances of child processes (linked list i guess)
-    //
-
     for (int i = 0; i <CONFIG_FILE_LINES; i++) {
         if (strlen(configLines[i].programName) != 0) {
             pid_t pids[MAX_PROCESSES] = {-1};
@@ -111,22 +107,16 @@ void beginProcNanny() {
                     strncpy(temp.processName, configLines[i].programName, PROGRAM_NAME_LENGTH);
                     temp.processPid = pids[j];
                     temp.runtime = configLines[i].runtime;
-                    ll_add_unique(&monitoredProccesses, &temp, &monitoredProccessComparator); // in the future change this to ll_add_unique
+                    ll_add_unique(&monitoredProccesses, &temp, &monitoredProccessComparator);
                 }
             }
         }
     }
 
+    // next, we will delegate these pids off to forked children which we will talk to using pipes
+    // manage the pipes to the children using a linked list
 
-
-
-//    for (int i = 0; i <CONFIG_FILE_LINES; i++) {
-//        if (strlen(configLines[i].programName) != 0) {
-//            forkMonitorProcess(configLines[i].programName, configLines[i].runtime);
-//        }
-//    }
-
-   // readPipes();
+//   readPipes();
 }
 
 void forkMonitorProcess(const char *process, unsigned int monitorTime) {
@@ -254,12 +244,6 @@ void readPipes() {
 }
 
 void cleanUp() {
-//    for (int i = 0; i < CONFIG_FILE_LINES; i++) {
-//        if (configLines[i] != NULL) {
-//            free(configLines[i]);
-//            configLines[i] = NULL;
-//        }
-//    }
     ll_free(&monitoredProccesses);
 }
 
