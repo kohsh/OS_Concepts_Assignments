@@ -111,7 +111,7 @@ void beginProcNanny() {
                     strncpy(temp.processName, configLines[i].programName, PROGRAM_NAME_LENGTH);
                     temp.processPid = pids[j];
                     temp.runtime = configLines[i].runtime;
-                    ll_add(&monitoredProccesses, &temp);
+                    ll_add(&monitoredProccesses, &temp); // in the future change this to ll_add_unique
                 }
             }
         }

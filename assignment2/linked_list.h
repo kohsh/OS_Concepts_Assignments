@@ -4,7 +4,12 @@
 #include <stdbool.h>
 
 typedef void (*NodeOperation)(void *);
+
+// returns true if the predicate is fulfilled
 typedef bool (*Predicate)(void *);
+
+// returns true if the two items are equal in value
+typedef bool (*Comparator)(void *, void *);
 
 typedef struct _Node {
     void *data;
@@ -21,6 +26,7 @@ typedef struct _List {
 void    ll_init(List *list, size_t nodeSize);
 void    ll_free(List *list);
 void    ll_add(List *list, void *data);
+void    ll_add_unique(List *list, void *data, Comparator comparator);
 void    ll_forEach(List *list, NodeOperation operation);
 void    ll_removeIf(List *list, Predicate operation);
 int     ll_size(List *list);

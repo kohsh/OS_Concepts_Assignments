@@ -37,6 +37,22 @@ void ll_add(List *list, void *data) {
     list->length++;
 }
 
+void ll_add_unique(List *list, void *data, Comparator comparator)  {
+    if (comparator == NULL) {
+        return;
+    }
+    Node *node = list->head;
+    bool hasDuplicate = false;
+    while((node != NULL) && !hasDuplicate) {
+        hasDuplicate = !comparator(node->data, data);
+        node = node->next;
+    }
+
+    if (!hasDuplicate) {
+        ll_add(list, data);
+    }
+}
+
 void ll_forEach(List *list, NodeOperation operation) {
     if (operation == NULL) {
         return;
