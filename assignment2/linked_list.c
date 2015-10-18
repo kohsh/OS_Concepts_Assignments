@@ -101,7 +101,41 @@ void ll_removeIf(List *list, Predicate operation) {
     }
 }
 
+void ll_remove(List *list, void *data) {
+    if (list->comparator == NULL) {
+        return;
+    }
+    Node* node = list->head;
+    Node* previousNode = list->head;
+    while(node != NULL) {
+        bool remove = list->comparator(node->data, data);
+        if (remove) {
+            Node* temp = node;
+            if (node == list->head) {
+                list->head = node->next;
+                previousNode = list->head;
+                node = list->head;
+            }
+            else if(node == list->tail) {
+                list->tail = previousNode;
+                previousNode->next = NULL;
+                node = NULL;
+            }
+            else {
+                previousNode->next = node->next;
+                node = previousNode->next;
+            }
+            list->length--;
+            free(temp->data);
+            free(temp);
+        }
+        else {
+            previousNode = node;
+            node = node->next;
+        }
+    }
+}
+
 int ll_size(List *list) {
     return list->length;
 }
-

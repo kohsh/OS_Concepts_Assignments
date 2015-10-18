@@ -25,11 +25,21 @@ typedef struct _List {
 } List;
 
 void    ll_init(List *list, size_t nodeSize, Comparator comparator);
+
 void    ll_free(List *list);
+
 void    ll_add(List *list, void *data);
+
+// if no comparator is supplied in ll_init, an ll_add will be performed
 void    ll_add_unique(List *list, void *data);
+
 void    ll_forEach(List *list, NodeOperation operation);
+
+// if no comparator is supplied in ll_init, no Node will be removed
+void    ll_remove(List *list, void* data);
+
 void    ll_removeIf(List *list, Predicate operation);
+
 int     ll_size(List *list);
 
 #endif //LINKED_LIST_H

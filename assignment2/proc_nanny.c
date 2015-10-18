@@ -75,9 +75,10 @@ void readConfigurationFile() {
         strncpy(tempBuff, line, (size_t) charsRead);
         int numMatched = sscanf(tempBuff, "%s %d", configLines[index].programName, &configLines[index].runtime);
         if (numMatched != 2) {
+            // todo : log message and exit procnanny
             // "expected to match only 2 arguments, matched %d", index
             // "here is line %d: %s", index, tempBuff
-            //logConfigFileError(index, tempBuff, numMatched)
+            // logConfigFileError(index, tempBuff, numMatched)
         }
         trimWhitespace(configLines[index].programName);
         index++;
@@ -97,7 +98,7 @@ void beginProcNanny() {
 
     ll_init(&monitoredProccesses, sizeof(MonitoredProcess), &monitoredProccessComparator);
 
-    for (int i = 0; i <CONFIG_FILE_LINES; i++) {
+    for (int i = 0; i < CONFIG_FILE_LINES; i++) {
         if (strlen(configLines[i].programName) != 0) {
             pid_t pids[MAX_PROCESSES] = {-1};
             getPids(configLines[i].programName, pids);
@@ -107,6 +108,7 @@ void beginProcNanny() {
                     strncpy(temp.processName, configLines[i].programName, PROGRAM_NAME_LENGTH);
                     temp.processPid = pids[j];
                     temp.runtime = configLines[i].runtime;
+                    temp.beingMonitored = false;
                     ll_add_unique(&monitoredProccesses, &temp);
                 }
             }
@@ -116,6 +118,26 @@ void beginProcNanny() {
     // next, we will delegate these pids off to forked children which we will talk to using pipes
     // manage the pipes to the children using a linked list
 
+
+//    while(true) {
+//    for each MonitoredProcess in MonitoredProcesses :
+//        if mp.beingMonitored is false:
+//            for each child in childProcs:
+//                if childProcess is available
+//                    add work to child
+//            if no child is available fork off a new child
+//
+//    for each child in childProcs:
+//        check childProcess is done
+//            if so:
+//                set to available and add 1 to total procs killed if it happened in child
+//                find corresponding monitoredProccess (based on pid) and remove from MonitoredProccesses ll
+
+//
+//    if five seconds have elapsed, re-check for new pids
+//
+// todo : 5 second loop checking for new pids to monitor ie, what is done above
+//}
 //   readPipes();
 }
 

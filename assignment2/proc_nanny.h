@@ -56,6 +56,7 @@ typedef struct _MonitoredProcess {
     pid_t processPid;
     char processName[PROGRAM_NAME_LENGTH];
     unsigned int runtime;
+    bool beingMonitored;
 } MonitoredProcess;
 
 
