@@ -21,6 +21,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <sys/types.h>
+#include <stdbool.h>
 
 #define MAX_PROCESSES 1024
 #define CONFIG_FILE_LINES 256
@@ -41,33 +42,36 @@ typedef struct _LogMessage {
 
 typedef struct _ProgramConfig {
     char programName[PROGRAM_NAME_LENGTH];
-    int runtime;
+    unsigned int runtime;
 } ProgramConfig;
 
 typedef struct _ChildProcess {
-    pid_t childPid;
+    pid_t childPid; // may or may not be required... not sure yet
     Pipe toParent;
     Pipe toChild;
+    bool isAvailable;
 } ChildProcess;
 
 typedef struct _MonitoredProcess {
     pid_t processPid;
     char processName[PROGRAM_NAME_LENGTH];
+    unsigned int runtime;
 } MonitoredProcess;
 
 
 int pnMain(int argc, char* argv[]);
 
-void beginProcNanny(const char *configurationFile);
+void beginProcNanny();
 void checkInputs(int args, char* argv[]);
 void exitError(const char* errorMessage);
 void forkMonitorProcess(const char *process, unsigned int monitorTime);
-void freeConfigLines();
+void cleanUp();
 void getCurrentTime(char* buffer);
 void getPids(const char* processName, pid_t pids[MAX_PROCESSES]);
 void killPid(pid_t pid);
 void killAllProcNannys();
 void monitorProcess(const char *process, unsigned int monitorTime);
+void readConfigurationFile();
 void readPipes();
 void trimWhitespace(char* str);
 void writeToPipe(Pipe* pPipe, const char* message);

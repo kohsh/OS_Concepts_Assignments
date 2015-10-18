@@ -25,19 +25,24 @@
 #include <ctype.h>
 #include <time.h>
 #include "proc_nanny.h"
+#include "linked_list.h"
 #include "memwatch.h"
 
 Pipe totalKilledProcesses;
 Pipe logMessages;
 
 char logLocation[512];
-char* configLines[CONFIG_FILE_LINES] = {NULL};
+char configFileLocation[512];
+
+ProgramConfig configLines[CONFIG_FILE_LINES];
+List monitoredProccesses;
 
 int pnMain(int args, char* argv[]) {
     checkInputs(args, argv);
     killAllProcNannys();
-    beginProcNanny(argv[1]);
-    freeConfigLines();
+    readConfigurationFile();
+    beginProcNanny();
+    cleanUp();
     exit(EXIT_SUCCESS);
 }
 
@@ -53,26 +58,34 @@ void killAllProcNannys() {
     }
 }
 
-void beginProcNanny(const char *configurationFile) {
+void readConfigurationFile() {
     FILE * fp;
     char * line = NULL;
     size_t len = 0;
     ssize_t charsRead;
 
-    fp = fopen(configurationFile, "r");
+    fp = fopen(configFileLocation, "r");
     if (fp == NULL)
         exitError("ERROR: could not read configuration file.");
 
     int index = 0;
 
     while ((charsRead = getline(&line, &len, fp)) != -1) {
-        configLines[index] = (char *) calloc((size_t) charsRead + 1,  sizeof(char));
-        strncpy(configLines[index], line, (size_t) charsRead);
-        trimWhitespace(configLines[index]);
+        char tempBuff[512];
+        strncpy(tempBuff, line, (size_t) charsRead);
+        int numMatched = sscanf(tempBuff, "%s %d", configLines[index].programName, &configLines[index].runtime);
+        if (numMatched != 2) {
+            // "expected to match only 2 arguments, matched %d", index
+            // "here is line %d: %s", index, tempBuff
+            //logConfigFileError(index, tempBuff, numMatched)
+        }
+        trimWhitespace(configLines[index].programName);
         index++;
     }
     fclose(fp);
-    unsigned int monitorTime = (unsigned int) atoi(configLines[0]);
+}
+
+void beginProcNanny() {
 
     if (pipe(totalKilledProcesses.readWrite) != 0) {
         exitError("pipe error");
@@ -82,13 +95,38 @@ void beginProcNanny(const char *configurationFile) {
         exitError("pipe error");
     }
 
-    for (int i = 1; i <CONFIG_FILE_LINES; i++) {
-        if (configLines[i] != NULL) {
-            forkMonitorProcess(configLines[i], monitorTime);
+    ll_init(&monitoredProccesses, sizeof(MonitoredProcess));
+
+    //given the configuration lines, find all processes matching the program names (use getPids)
+    //and delegate these off to new instances of child processes (linked list i guess)
+    //
+
+    for (int i = 0; i <CONFIG_FILE_LINES; i++) {
+        if (strlen(configLines[i].programName) != 0) {
+            pid_t pids[MAX_PROCESSES] = {-1};
+            getPids(configLines[i].programName, pids);
+            for (int j = 0; j < MAX_PROCESSES; j++) {
+                if (pids[j] > 0) {
+                    MonitoredProcess temp;
+                    strncpy(temp.processName, configLines[i].programName, PROGRAM_NAME_LENGTH);
+                    temp.processPid = pids[j];
+                    temp.runtime = configLines[i].runtime;
+                    ll_add(&monitoredProccesses, &temp);
+                }
+            }
         }
     }
 
-    readPipes();
+
+
+
+//    for (int i = 0; i <CONFIG_FILE_LINES; i++) {
+//        if (strlen(configLines[i].programName) != 0) {
+//            forkMonitorProcess(configLines[i].programName, configLines[i].runtime);
+//        }
+//    }
+
+   // readPipes();
 }
 
 void forkMonitorProcess(const char *process, unsigned int monitorTime) {
@@ -138,7 +176,7 @@ void monitorProcess(const char *process, unsigned int monitorTime) {
         writeToPipe(&logMessages, msg.message);
         close(logMessages.readWrite[WRITE_PIPE]);
         close(totalKilledProcesses.readWrite[WRITE_PIPE]);
-        freeConfigLines();
+        cleanUp();
         _exit(0);
     }
 
@@ -169,7 +207,7 @@ void monitorProcess(const char *process, unsigned int monitorTime) {
     writeToPipe(&totalKilledProcesses, numberBuffer);
     close(totalKilledProcesses.readWrite[WRITE_PIPE]);
 
-    freeConfigLines();
+    cleanUp();
     _exit(0);
 }
 
@@ -178,7 +216,7 @@ void writeToPipe(Pipe *pPipe, const char *message) {
 }
 
 void readPipes() {
-    close(logMessages.readWrite[WRITE_PIPE]);           // don't need to write to the pipe
+    close(logMessages.readWrite[WRITE_PIPE]);          // don't need to write to the pipe
     close(totalKilledProcesses.readWrite[WRITE_PIPE]); // don't need to write to the pipe
 
     char byte;
@@ -215,13 +253,14 @@ void readPipes() {
     close(totalKilledProcesses.readWrite[READ_PIPE]);
 }
 
-void freeConfigLines() {
-    for (int i = 0; i < CONFIG_FILE_LINES; i++) {
-        if (configLines[i] != NULL) {
-            free(configLines[i]);
-            configLines[i] = NULL;
-        }
-    }
+void cleanUp() {
+//    for (int i = 0; i < CONFIG_FILE_LINES; i++) {
+//        if (configLines[i] != NULL) {
+//            free(configLines[i]);
+//            configLines[i] = NULL;
+//        }
+//    }
+    ll_free(&monitoredProccesses);
 }
 
 void exitError(const char *errorMessage) {
@@ -233,26 +272,21 @@ void trimWhitespace(char *str) {
     int i;
     int begin = 0;
     size_t end = strlen(str) - 1;
-
     while (isspace(str[begin])) {
         begin++;
     }
-
     while ((end >= begin) && isspace(str[end])) {
         end--;
     }
-
     for (i = begin; i <= end; i++) {
         str[i - begin] = str[i];
     }
-
     str[i - begin] = '\0';
-
 }
 
 void getPids(const char *processName, pid_t pids[MAX_PROCESSES]) {
     char command[512];
-    snprintf(command, 511, "pgrep '%s'", processName);
+    snprintf(command, 511, "pgrep -x '%s'", processName);
     FILE* pgrepOutput = popen(command, "r");
 
     char * line = NULL;
@@ -323,10 +357,13 @@ void checkInputs(int args, char* argv[]) {
         fclose(log);
         exit(EXIT_FAILURE);
     }
+
+    // cache the location of the configuration file
+    strncpy(configFileLocation, argv[1], 512);
 }
 
 void killPid(pid_t pid) {
     char buff[256];
-    snprintf(buff, 256, "kill -9 %d >> /dev/null", pid);
+    snprintf(buff, 256, "kill -9 %d > /dev/null", pid);
     system(buff);
 }
