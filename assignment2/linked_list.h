@@ -21,12 +21,13 @@ typedef struct _List {
     size_t nodeSize;
     Node *head;
     Node *tail;
+    Comparator comparator;
 } List;
 
-void    ll_init(List *list, size_t nodeSize);
+void    ll_init(List *list, size_t nodeSize, Comparator comparator);
 void    ll_free(List *list);
 void    ll_add(List *list, void *data);
-void    ll_add_unique(List *list, void *data, Comparator comparator);
+void    ll_add_unique(List *list, void *data);
 void    ll_forEach(List *list, NodeOperation operation);
 void    ll_removeIf(List *list, Predicate operation);
 int     ll_size(List *list);

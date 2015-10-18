@@ -95,7 +95,7 @@ void beginProcNanny() {
         exitError("pipe error");
     }
 
-    ll_init(&monitoredProccesses, sizeof(MonitoredProcess));
+    ll_init(&monitoredProccesses, sizeof(MonitoredProcess), &monitoredProccessComparator);
 
     for (int i = 0; i <CONFIG_FILE_LINES; i++) {
         if (strlen(configLines[i].programName) != 0) {
@@ -107,7 +107,7 @@ void beginProcNanny() {
                     strncpy(temp.processName, configLines[i].programName, PROGRAM_NAME_LENGTH);
                     temp.processPid = pids[j];
                     temp.runtime = configLines[i].runtime;
-                    ll_add_unique(&monitoredProccesses, &temp, &monitoredProccessComparator);
+                    ll_add_unique(&monitoredProccesses, &temp);
                 }
             }
         }

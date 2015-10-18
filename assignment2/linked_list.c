@@ -3,11 +3,12 @@
 #include "linked_list.h"
 #include "memwatch.h"
 
-void ll_init(List *list, size_t nodeSize) {
+void ll_init(List *list, size_t nodeSize, Comparator comparator) {
     list->length = 0;
     list->head = NULL;
     list->tail = NULL;
     list->nodeSize = nodeSize;
+    list->comparator = comparator;
 }
 
 void ll_free(List *list) {
@@ -37,14 +38,15 @@ void ll_add(List *list, void *data) {
     list->length++;
 }
 
-void ll_add_unique(List *list, void *data, Comparator comparator)  {
-    if (comparator == NULL) {
+void ll_add_unique(List *list, void *data)  {
+    if (list->comparator == NULL) {
+        ll_add(list, data);
         return;
     }
     Node *node = list->head;
     bool hasDuplicate = false;
     while((node != NULL) && (hasDuplicate == false)) {
-        hasDuplicate = comparator(node->data, data);
+        hasDuplicate = list->comparator(node->data, data);
         node = node->next;
     }
 
