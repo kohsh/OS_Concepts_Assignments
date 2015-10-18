@@ -57,13 +57,6 @@ void ll_removeIf(List *list, Predicate operation) {
     while(node != NULL) {
         bool remove = operation(node->data);
         if (remove) {
-            // remove the node
-            // requires the node prior to node being removed
-            // if the first node, set list->head to list->head->next
-            // if last node, set list->tail to previousNode
-            // if other node, set previousNode->next to node->next
-            // move to next node, keep previousNode the same
-            // free(node->data); free(node);
             Node* temp = node;
             if (node == list->head) {
                 list->head = node->next;
@@ -79,10 +72,9 @@ void ll_removeIf(List *list, Predicate operation) {
                 previousNode->next = node->next;
                 node = previousNode->next;
             }
-
+            list->length--;
             free(temp->data);
             free(temp);
-            list->length--;
         }
         else {
             previousNode = node;
@@ -90,3 +82,8 @@ void ll_removeIf(List *list, Predicate operation) {
         }
     }
 }
+
+int ll_size(List *list) {
+    return list->length;
+}
+
