@@ -76,4 +76,6 @@ void readPipes();
 void trimWhitespace(char* str);
 void writeToPipe(Pipe* pPipe, const char* message);
 
+bool monitoredProccessComparator(void* mp1, void * mp2);
+
 #endif //PROC_NANNY_H

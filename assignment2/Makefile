@@ -11,7 +11,7 @@ procnanny: $(SRCS) $(INCLUDES)
 clean: 
 	$(RM) procnanny test15 test5 testLong *.o *.out *.log *.tar
 	
-test: procnanny test5 test15
+test: procnanny test5 test15 testLong
 	chmod +x launchTestProcesses.sh
 	./launchTestProcesses.sh&
 	PROCNANNYLOGS="./pn.log" ./procnanny testInput.config

@@ -111,7 +111,7 @@ void beginProcNanny() {
                     strncpy(temp.processName, configLines[i].programName, PROGRAM_NAME_LENGTH);
                     temp.processPid = pids[j];
                     temp.runtime = configLines[i].runtime;
-                    ll_add(&monitoredProccesses, &temp); // in the future change this to ll_add_unique
+                    ll_add_unique(&monitoredProccesses, &temp, &monitoredProccessComparator); // in the future change this to ll_add_unique
                 }
             }
         }
@@ -366,4 +366,15 @@ void killPid(pid_t pid) {
     char buff[256];
     snprintf(buff, 256, "kill -9 %d > /dev/null", pid);
     system(buff);
+}
+
+bool monitoredProccessComparator(void *mp1, void *mp2) {
+    MonitoredProcess* first = (MonitoredProcess*) mp1;
+    MonitoredProcess* second = (MonitoredProcess*) mp2;
+
+    if (first->processPid == second->processPid) {
+        return true;
+    }
+
+    return false;
 }

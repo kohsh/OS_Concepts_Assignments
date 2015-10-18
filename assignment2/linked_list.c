@@ -43,12 +43,12 @@ void ll_add_unique(List *list, void *data, Comparator comparator)  {
     }
     Node *node = list->head;
     bool hasDuplicate = false;
-    while((node != NULL) && !hasDuplicate) {
-        hasDuplicate = !comparator(node->data, data);
+    while((node != NULL) && (hasDuplicate == false)) {
+        hasDuplicate = comparator(node->data, data);
         node = node->next;
     }
 
-    if (!hasDuplicate) {
+    if (hasDuplicate == false) {
         ll_add(list, data);
     }
 }
