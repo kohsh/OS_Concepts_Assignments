@@ -132,13 +132,15 @@ void beginProcNanny() {
 //            if so:
 //                set to available and add 1 to total procs killed if it happened in child
 //                find corresponding monitoredProccess (based on pid) and remove from MonitoredProccesses ll
-
+//
+//    check for signals:
+//          if SIGHUP: re read configuration file and clear old entries in configLines
+//          if SIGINT: proceed to cleanup parent and children nicely
+//              wait for children to finish, send them an EXIT message (triggers for them to die);
+//              log the total number of processes killed during lifetime of parent procnanny; return;
 //
 //    if five seconds have elapsed, re-check for new pids
-//
-// todo : 5 second loop checking for new pids to monitor ie, what is done above
 //}
-//   readPipes();
 }
 
 void forkMonitorProcess(const char *process, unsigned int monitorTime) {
