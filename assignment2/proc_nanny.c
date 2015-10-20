@@ -28,6 +28,9 @@
 #include "linked_list.h"
 #include "memwatch.h"
 
+bool recievedSIGHUP = false;
+bool recievedSIGINT = false;
+
 Pipe totalKilledProcesses;
 Pipe logMessages;
 
@@ -36,6 +39,7 @@ char configFileLocation[512];
 
 ProgramConfig configLines[CONFIG_FILE_LINES];
 List monitoredProccesses;
+List childProccesses;
 
 int pnMain(int args, char* argv[]) {
     checkInputs(args, argv);
@@ -97,6 +101,7 @@ void beginProcNanny() {
     }
 
     ll_init(&monitoredProccesses, sizeof(MonitoredProcess), &monitoredProccessComparator);
+    ll_init(&childProccesses, sizeof(ChildProcess), NULL);
 
     for (int i = 0; i < CONFIG_FILE_LINES; i++) {
         if (strlen(configLines[i].programName) != 0) {
@@ -132,12 +137,16 @@ void beginProcNanny() {
 //            if so:
 //                set to available and add 1 to total procs killed if it happened in child
 //                find corresponding monitoredProccess (based on pid) and remove from MonitoredProccesses ll
-//
-//    check for signals:
-//          if SIGHUP: re read configuration file and clear old entries in configLines
-//          if SIGINT: proceed to cleanup parent and children nicely
-//              wait for children to finish, send them an EXIT message (triggers for them to die);
-//              log the total number of processes killed during lifetime of parent procnanny; return;
+
+    if (recievedSIGHUP) {
+//        re-read configuration file and clear old entries in configLines
+    }
+
+    if (recievedSIGINT) {
+//        wait for children to finish, send them an EXIT message (triggers for them to die);
+//        log the total number of processes killed during lifetime of parent procnanny; return;
+    }
+
 //
 //    if five seconds have elapsed, re-check for new pids
 //}
@@ -269,6 +278,7 @@ void readPipes() {
 
 void cleanUp() {
     ll_free(&monitoredProccesses);
+    ll_free(&childProccesses);
 }
 
 void exitError(const char *errorMessage) {
