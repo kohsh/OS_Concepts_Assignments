@@ -35,6 +35,8 @@ void    ll_add_unique(List *list, void *data);
 
 void    ll_forEach(List *list, NodeOperation operation);
 
+void*   ll_getIf(List *list, Predicate operation);
+
 // if no comparator is supplied in ll_init, no Node will be removed
 void    ll_remove(List *list, void* data);
 

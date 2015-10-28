@@ -23,6 +23,7 @@
 #include <sys/types.h>
 #include <stdbool.h>
 
+#define REFRESH_RATE 5
 #define MAX_PROCESSES 1024
 #define CONFIG_FILE_LINES 256
 #define LOG_MESSAGE_LENGTH 512
@@ -67,16 +68,27 @@ void checkInputs(int args, char* argv[]);
 void exitError(const char* errorMessage);
 void forkMonitorProcess(const char *process, unsigned int monitorTime);
 void cleanUp();
+void checkForNewMonitoredProcesses();
+void checkOnChild(void* childProcess);
 void getCurrentTime(char* buffer);
 void getPids(const char* processName, pid_t pids[MAX_PROCESSES]);
+void initializeChild(ChildProcess* childWorker, MonitoredProcess* processToBeMonitored);
+void killChild(void* childProcess);
 void killPid(pid_t pid);
 void killAllProcNannys();
 void monitorProcess(const char *process, unsigned int monitorTime);
+void monitorNewProccesses(void* monitoredProcess);
 void readConfigurationFile();
 void readPipes();
+void signalHandler(int signo);
 void trimWhitespace(char* str);
 void writeToPipe(Pipe* pPipe, const char* message);
 
 bool monitoredProccessComparator(void* mp1, void * mp2);
+bool getChildPredicate(void* childProcess);
+
+ChildProcess* spawnNewChildWorker();
+
+
 
 #endif //PROC_NANNY_H

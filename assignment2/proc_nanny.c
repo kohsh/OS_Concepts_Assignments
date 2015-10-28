@@ -28,8 +28,9 @@
 #include "linked_list.h"
 #include "memwatch.h"
 
-bool recievedSIGHUP = false;
-bool recievedSIGINT = false;
+bool receivedSIGHUP = false;
+bool receivedSIGINT = false;
+bool receivedSIGALARM = false;
 
 Pipe totalKilledProcesses;
 Pipe logMessages;
@@ -42,6 +43,16 @@ List monitoredProccesses;
 List childProccesses;
 
 int pnMain(int args, char* argv[]) {
+
+    if (signal(SIGHUP, &signalHandler) == SIG_ERR)
+        printf("error with catching SIGHUP\n");
+
+    if (signal(SIGINT, &signalHandler) == SIG_ERR)
+        printf("error with catching SIGINT\n");
+
+    if (signal(SIGALRM, &signalHandler) == SIG_ERR)
+        printf("error with setting Alarm\n");
+
     checkInputs(args, argv);
     killAllProcNannys();
     readConfigurationFile();
@@ -102,54 +113,42 @@ void beginProcNanny() {
 
     ll_init(&monitoredProccesses, sizeof(MonitoredProcess), &monitoredProccessComparator);
     ll_init(&childProccesses, sizeof(ChildProcess), NULL);
-
-    for (int i = 0; i < CONFIG_FILE_LINES; i++) {
-        if (strlen(configLines[i].programName) != 0) {
-            pid_t pids[MAX_PROCESSES] = {-1};
-            getPids(configLines[i].programName, pids);
-            for (int j = 0; j < MAX_PROCESSES; j++) {
-                if (pids[j] > 0) {
-                    MonitoredProcess temp;
-                    strncpy(temp.processName, configLines[i].programName, PROGRAM_NAME_LENGTH);
-                    temp.processPid = pids[j];
-                    temp.runtime = configLines[i].runtime;
-                    temp.beingMonitored = false;
-                    ll_add_unique(&monitoredProccesses, &temp);
-                }
-            }
-        }
-    }
+    checkForNewMonitoredProcesses();
+    alarm(REFRESH_RATE);
 
     // next, we will delegate these pids off to forked children which we will talk to using pipes
     // manage the pipes to the children using a linked list
 
 
-//    while(true) {
-//    for each MonitoredProcess in MonitoredProcesses :
-//        if mp.beingMonitored is false:
-//            for each child in childProcs:
-//                if childProcess is available
-//                    add work to child
-//            if no child is available fork off a new child
-//
-//    for each child in childProcs:
-//        check childProcess is done
-//            if so:
-//                set to available and add 1 to total procs killed if it happened in child
-//                find corresponding monitoredProccess (based on pid) and remove from MonitoredProccesses ll
+    while(true) {
+        ll_forEach(&monitoredProccesses, &monitorNewProccesses);
+        ll_forEach(&childProccesses, &checkOnChild);
 
-    if (recievedSIGHUP) {
-//        re-read configuration file and clear old entries in configLines
+        if (receivedSIGHUP) {
+            receivedSIGHUP = false;
+            for (int i = 0; i < CONFIG_FILE_LINES; i++) {
+                configLines[i].runtime = 0;
+                strcpy(configLines[i].programName, "");
+            }
+            readConfigurationFile();
+            // TODO : log this -> [Mon Jan 16 11:29:17 MST 2012] Info: Caught SIGHUP. Configuration file 'nanny.config' re-read.
+            // to both stdout and the logfile
+        }
+
+        if (receivedSIGALARM) {
+            receivedSIGALARM = false;
+            checkForNewMonitoredProcesses();
+            alarm(REFRESH_RATE);
+        }
+
+        if (receivedSIGINT) {
+            receivedSIGINT = false;
+            cleanUp();
+            exit(EXIT_SUCCESS);
+            // TODO : log this -> [Mon Jan 16 11:29:17 MST 2012] Info: Caught SIGINT. Exiting cleanly.  1 process(es) killed.
+            // to both stdout and the logfile
+        }
     }
-
-    if (recievedSIGINT) {
-//        wait for children to finish, send them an EXIT message (triggers for them to die);
-//        log the total number of processes killed during lifetime of parent procnanny; return;
-    }
-
-//
-//    if five seconds have elapsed, re-check for new pids
-//}
 }
 
 void forkMonitorProcess(const char *process, unsigned int monitorTime) {
@@ -277,6 +276,9 @@ void readPipes() {
 }
 
 void cleanUp() {
+
+    // todo: confirm that children get killed!!!
+    ll_forEach(&childProccesses, &killChild);
     ll_free(&monitoredProccesses);
     ll_free(&childProccesses);
 }
@@ -395,4 +397,118 @@ bool monitoredProccessComparator(void *mp1, void *mp2) {
     }
 
     return false;
+}
+
+
+void signalHandler(int signo)
+{
+    switch (signo) {
+        case SIGINT:
+            receivedSIGINT = true;
+            break;
+        case SIGHUP:
+            receivedSIGHUP = true;
+            break;
+        case SIGALRM:
+            receivedSIGALARM = true;
+            alarm(REFRESH_RATE);
+            break;
+        default:
+            break;
+    }
+}
+
+void checkForNewMonitoredProcesses() {
+    for (int i = 0; i < CONFIG_FILE_LINES; i++) {
+        if (strlen(configLines[i].programName) != 0) {
+            pid_t pids[MAX_PROCESSES] = {-1};
+            getPids(configLines[i].programName, pids);
+            for (int j = 0; j < MAX_PROCESSES; j++) {
+                if (pids[j] > 0) {
+                    MonitoredProcess temp;
+                    strncpy(temp.processName, configLines[i].programName, PROGRAM_NAME_LENGTH);
+                    temp.processPid = pids[j];
+                    temp.runtime = configLines[i].runtime;
+                    temp.beingMonitored = false;
+                    ll_add_unique(&monitoredProccesses, &temp);
+                }
+            }
+        }
+    }
+}
+
+void monitorNewProccesses(void* monitoredProcess) {
+    MonitoredProcess* process = (MonitoredProcess*) monitoredProcess;
+    if (process->beingMonitored == false) {
+        ChildProcess* worker = ll_getIf(&childProccesses, &getChildPredicate);
+        if (worker == NULL) {
+            worker = spawnNewChildWorker();
+        }
+        initializeChild(worker, process);
+    }
+}
+
+bool getChildPredicate(void *childProcess) {
+    ChildProcess* temp = (ChildProcess*) childProcess;
+    return temp->isAvailable;
+}
+
+void initializeChild(ChildProcess *childWorker, MonitoredProcess *processToBeMonitored) {
+    childWorker->isAvailable = false;
+    processToBeMonitored->beingMonitored = true;
+    processToBeMonitored->beingMonitored = true;
+    // TODO : Write to child the pid, and the runtime
+}
+
+ChildProcess *spawnNewChildWorker() {
+    ChildProcess worker;
+    worker.isAvailable = true;
+    pipe(worker.toChild.readWrite);
+    pipe(worker.toParent.readWrite);
+    __pid_t forkResult = fork();
+
+    switch(forkResult) {
+        case -1:    //Error
+            exitError("ERROR: error in monitoring process");
+            break;
+        case 0:     //Child
+            close(worker.toChild.readWrite[WRITE_PIPE]);
+            close(worker.toParent.readWrite[READ_PIPE]);
+            ll_free(&monitoredProccesses);
+            ll_free(&childProccesses);
+            printf("im a new child!!!\n");
+            while(true) {
+                // TODO
+                // read instructions from the parent (non blocking preferably, if not we can figure something out)
+                // wait for specified time, kill monitored pid if needed,
+                // write back to parent if you did or not (1 or 0)
+
+            }
+            break;
+        default:    //Parent
+            break;
+    }
+
+    worker.childPid = forkResult;
+    ll_add(&childProccesses, &worker);
+
+    return (ChildProcess*) ll_getIf(&childProccesses, &getChildPredicate);
+
+}
+
+void checkOnChild(void *childProcess) {
+ // todo fill this in
+
+//    for each child in childProcs:
+//        check childProcess is done
+//            if so:
+//                set to available and add 1 to total procs killed if it happened in chil
+//                Log anything if necessary
+//                find corresponding monitoredProccess (based on pid) and remove from MonitoredProccesses ll
+
+}
+
+void killChild(void *childProcess) {
+    ChildProcess* child = (ChildProcess*) childProcess;
+    killPid(child->childPid);
 }

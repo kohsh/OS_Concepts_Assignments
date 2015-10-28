@@ -139,3 +139,18 @@ void ll_remove(List *list, void *data) {
 int ll_size(List *list) {
     return list->length;
 }
+
+void* ll_getIf(List *list, Predicate operation) {
+    if (operation == NULL) {
+        return NULL;
+    }
+    Node *node = list->head;
+    while(node != NULL) {
+        if (operation(node->data) == true) {
+            return node->data;
+        }
+        node = node->next;
+    }
+
+    return NULL;
+}
