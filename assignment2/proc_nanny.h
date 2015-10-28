@@ -76,6 +76,7 @@ void initializeChild(ChildProcess* childWorker, MonitoredProcess* processToBeMon
 void killChild(void* childProcess);
 void killPid(pid_t pid);
 void killAllProcNannys();
+void logToFile(const char* type, const char* msg, bool logToSTDOUT);
 void monitorProcess(const char *process, unsigned int monitorTime);
 void monitorNewProccesses(void* monitoredProcess);
 void readConfigurationFile();

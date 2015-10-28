@@ -32,6 +32,7 @@ bool receivedSIGHUP = false;
 bool receivedSIGINT = false;
 bool receivedSIGALARM = false;
 
+int numProcessesKilled = 0;
 Pipe totalKilledProcesses;
 Pipe logMessages;
 
@@ -80,8 +81,11 @@ void readConfigurationFile() {
     ssize_t charsRead;
 
     fp = fopen(configFileLocation, "r");
-    if (fp == NULL)
-        exitError("ERROR: could not read configuration file.");
+    if (fp == NULL) {
+        // todo : test that this works
+        logToFile("Error", "could not read configuration file.", true);
+        exit(EXIT_FAILURE);
+    }
 
     int index = 0;
 
@@ -90,10 +94,12 @@ void readConfigurationFile() {
         strncpy(tempBuff, line, (size_t) charsRead);
         int numMatched = sscanf(tempBuff, "%s %d", configLines[index].programName, &configLines[index].runtime);
         if (numMatched != 2) {
-            // todo : log message and exit procnanny
-            // "expected to match only 2 arguments, matched %d", index
-            // "here is line %d: %s", index, tempBuff
-            // logConfigFileError(index, tempBuff, numMatched)
+            // todo : test that error message gets logged
+            LogMessage msg;
+            snprintf(msg.message, LOG_MESSAGE_LENGTH,
+                     "expected two configuration arguments (found %d); check line %d: %s.",
+                     numMatched, index, tempBuff);
+            logToFile("Error", msg.message, false);
         }
         trimWhitespace(configLines[index].programName);
         index++;
@@ -116,10 +122,6 @@ void beginProcNanny() {
     checkForNewMonitoredProcesses();
     alarm(REFRESH_RATE);
 
-    // next, we will delegate these pids off to forked children which we will talk to using pipes
-    // manage the pipes to the children using a linked list
-
-
     while(true) {
         ll_forEach(&monitoredProccesses, &monitorNewProccesses);
         ll_forEach(&childProccesses, &checkOnChild);
@@ -131,8 +133,13 @@ void beginProcNanny() {
                 strcpy(configLines[i].programName, "");
             }
             readConfigurationFile();
-            // TODO : log this -> [Mon Jan 16 11:29:17 MST 2012] Info: Caught SIGHUP. Configuration file 'nanny.config' re-read.
-            // to both stdout and the logfile
+            LogMessage msg;
+            snprintf(msg.message, LOG_MESSAGE_LENGTH,
+                     "Caught SIGHUP. Configuration file '%s' re-read.",
+                     configFileLocation);
+            char type[] = "Info";
+            logToFile(type, msg.message, true);
+            // TODO : test that this got logged to file and STDOUT
         }
 
         if (receivedSIGALARM) {
@@ -144,9 +151,14 @@ void beginProcNanny() {
         if (receivedSIGINT) {
             receivedSIGINT = false;
             cleanUp();
+            LogMessage msg;
+            snprintf(msg.message, LOG_MESSAGE_LENGTH,
+                     "Caught SIGINT. Exiting cleanly.  %d process(es) killed.",
+                     numProcessesKilled);
+            logToFile("Info", msg.message, true);
+            // TODO : check that this gets logged to file and STDOUT
+            // TODO : make sure the number of processes killed is correct
             exit(EXIT_SUCCESS);
-            // TODO : log this -> [Mon Jan 16 11:29:17 MST 2012] Info: Caught SIGINT. Exiting cleanly.  1 process(es) killed.
-            // to both stdout and the logfile
         }
     }
 }
@@ -277,7 +289,7 @@ void readPipes() {
 
 void cleanUp() {
 
-    // todo: confirm that children get killed!!!
+    // todo: test that children get killed!!!
     ll_forEach(&childProccesses, &killChild);
     ll_free(&monitoredProccesses);
     ll_free(&childProccesses);
@@ -511,4 +523,21 @@ void checkOnChild(void *childProcess) {
 void killChild(void *childProcess) {
     ChildProcess* child = (ChildProcess*) childProcess;
     killPid(child->childPid);
+}
+
+void logToFile(const char* type, const char* msg, bool logToSTDOUT) {
+    char timebuffer[TIME_BUFFER_SIZE];
+    getCurrentTime(timebuffer);
+    LogMessage logMsg;
+    snprintf(logMsg.message, LOG_MESSAGE_LENGTH,
+             "[%s] %s: %s\n",
+             timebuffer, type, msg);
+
+    FILE* log = fopen(logLocation, "a");
+    fprintf(log, "%s", logMsg.message);
+    fclose(log);
+
+    if (logToSTDOUT == true) {
+        printf("%s", logMsg.message);
+    }
 }
