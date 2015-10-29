@@ -141,7 +141,6 @@ void beginProcNanny() {
                      configFileLocation);
             char type[] = "Info";
             logToFile(type, msg.message, true);
-            // TODO : test that this got logged to file and STDOUT
         }
 
         if (receivedSIGALARM) {
@@ -158,8 +157,6 @@ void beginProcNanny() {
                      "Caught SIGINT. Exiting cleanly. %d process(es) killed.",
                      numProcessesKilled);
             logToFile("Info", msg.message, true);
-            // TODO : check that this gets logged to file and STDOUT
-            // TODO : make sure the number of processes killed is correct
             exit(EXIT_SUCCESS);
         }
     }
@@ -469,7 +466,6 @@ void monitorNewProccesses(void* monitoredProcess) {
         snprintf(msg.message, LOG_MESSAGE_LENGTH, "Initializing monitoring of process '%s' (PID %d).",
                  process->processName, process->processPid);
         logToFile("Info", msg.message, false);
-        // TODO : add initializing message
     }
 }
 
