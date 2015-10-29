@@ -25,5 +25,5 @@ TA: Marcus Karpoff
 * if there are any unrecoverable errors in the configuration file an error will be logged and `procnanny` will cleanly exit with a return code of 1.
 
 #Sources
-* Basic and safe linked list operations bootstrap: `http://pseudomuto.com/development/2013/05/02/implementing-a-generic-linked-list-in-c/`, a majority of additions tot he linked list code was then later implemented by myself.
+* Basic and safe linked list operations bootstrap: `http://pseudomuto.com/development/2013/05/02/implementing-a-generic-linked-list-in-c/`, a majority of additions to the linked list code was then later implemented by myself.
 
