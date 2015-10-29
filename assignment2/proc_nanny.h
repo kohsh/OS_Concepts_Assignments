@@ -51,6 +51,10 @@ typedef struct _ChildProcess {
     Pipe toParent;
     Pipe toChild;
     bool isAvailable;
+    pid_t processPid;
+    char processName[PROGRAM_NAME_LENGTH];
+    unsigned int runtime;
+
 } ChildProcess;
 
 typedef struct _MonitoredProcess {

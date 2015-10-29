@@ -24,6 +24,8 @@
 #include <signal.h>
 #include <ctype.h>
 #include <time.h>
+#include <sys/poll.h>
+#include <fcntl.h>
 #include "proc_nanny.h"
 #include "linked_list.h"
 #include "memwatch.h"
@@ -82,8 +84,7 @@ void readConfigurationFile() {
 
     fp = fopen(configFileLocation, "r");
     if (fp == NULL) {
-        // todo : test that this works
-        logToFile("Error", "could not read configuration file.", true);
+        logToFile("Error", "Could not read configuration file.", true);
         exit(EXIT_FAILURE);
     }
 
@@ -94,12 +95,13 @@ void readConfigurationFile() {
         strncpy(tempBuff, line, (size_t) charsRead);
         int numMatched = sscanf(tempBuff, "%s %d", configLines[index].programName, &configLines[index].runtime);
         if (numMatched != 2) {
-            // todo : test that error message gets logged
             LogMessage msg;
             snprintf(msg.message, LOG_MESSAGE_LENGTH,
-                     "expected two configuration arguments (found %d); check line %d: %s.",
-                     numMatched, index, tempBuff);
+                     "Expected two configuration arguments at line %d of %s.",
+                     index, configFileLocation);
             logToFile("Error", msg.message, false);
+            cleanUp();
+            exit(EXIT_FAILURE);
         }
         trimWhitespace(configLines[index].programName);
         index++;
@@ -153,7 +155,7 @@ void beginProcNanny() {
             cleanUp();
             LogMessage msg;
             snprintf(msg.message, LOG_MESSAGE_LENGTH,
-                     "Caught SIGINT. Exiting cleanly.  %d process(es) killed.",
+                     "Caught SIGINT. Exiting cleanly. %d process(es) killed.",
                      numProcessesKilled);
             logToFile("Info", msg.message, true);
             // TODO : check that this gets logged to file and STDOUT
@@ -288,8 +290,6 @@ void readPipes() {
 }
 
 void cleanUp() {
-
-    // todo: test that children get killed!!!
     ll_forEach(&childProccesses, &killChild);
     ll_free(&monitoredProccesses);
     ll_free(&childProccesses);
@@ -411,7 +411,6 @@ bool monitoredProccessComparator(void *mp1, void *mp2) {
     return false;
 }
 
-
 void signalHandler(int signo)
 {
     switch (signo) {
@@ -435,6 +434,7 @@ void checkForNewMonitoredProcesses() {
         if (strlen(configLines[i].programName) != 0) {
             pid_t pids[MAX_PROCESSES] = {-1};
             getPids(configLines[i].programName, pids);
+            int numberFound = 0;
             for (int j = 0; j < MAX_PROCESSES; j++) {
                 if (pids[j] > 0) {
                     MonitoredProcess temp;
@@ -443,8 +443,16 @@ void checkForNewMonitoredProcesses() {
                     temp.runtime = configLines[i].runtime;
                     temp.beingMonitored = false;
                     ll_add_unique(&monitoredProccesses, &temp);
+                    numberFound++;
                 }
             }
+            // TODO : determine if this is needed
+//            if (numberFound == 0) {
+//                LogMessage msg;
+//                snprintf(msg.message, LOG_MESSAGE_LENGTH, "No '%s' processes found."
+//                        , configLines[i].programName);
+//                logToFile("Info", msg.message, false);
+//            }
         }
     }
 }
@@ -457,6 +465,11 @@ void monitorNewProccesses(void* monitoredProcess) {
             worker = spawnNewChildWorker();
         }
         initializeChild(worker, process);
+        LogMessage msg;
+        snprintf(msg.message, LOG_MESSAGE_LENGTH, "Initializing monitoring of process '%s' (PID %d).",
+                 process->processName, process->processPid);
+        logToFile("Info", msg.message, false);
+        // TODO : add initializing message
     }
 }
 
@@ -468,8 +481,14 @@ bool getChildPredicate(void *childProcess) {
 void initializeChild(ChildProcess *childWorker, MonitoredProcess *processToBeMonitored) {
     childWorker->isAvailable = false;
     processToBeMonitored->beingMonitored = true;
-    processToBeMonitored->beingMonitored = true;
-    // TODO : Write to child the pid, and the runtime
+    strncpy(childWorker->processName, processToBeMonitored->processName, PROGRAM_NAME_LENGTH);
+    childWorker->processPid = processToBeMonitored->processPid;
+    childWorker->runtime = processToBeMonitored->runtime;
+
+    char buff[255];
+    snprintf(buff, 255, "PID: %d, RUNTIME: %d\n", processToBeMonitored->processPid, processToBeMonitored->runtime);
+
+    write(childWorker->toChild.readWrite[WRITE_PIPE], buff, strlen(buff));
 }
 
 ChildProcess *spawnNewChildWorker() {
@@ -488,36 +507,73 @@ ChildProcess *spawnNewChildWorker() {
             close(worker.toParent.readWrite[READ_PIPE]);
             ll_free(&monitoredProccesses);
             ll_free(&childProccesses);
-            printf("im a new child!!!\n");
             while(true) {
-                // TODO
-                // read instructions from the parent (non blocking preferably, if not we can figure something out)
-                // wait for specified time, kill monitored pid if needed,
-                // write back to parent if you did or not (1 or 0)
+                FILE* fromParent = fdopen(worker.toChild.readWrite[READ_PIPE], "r");
+                char command[255];
+                while(fgets(command, 255, fromParent) != NULL) {
+                    // get parameters from parent's command
+                    pid_t pidToMonitor = -1;
+                    unsigned int runtime = 0;
+                    int numKilled = 0;
+                    sscanf(command, "PID: %d, RUNTIME: %d\n", &pidToMonitor, &runtime);
 
+                    // monitor process
+
+                    sleep(runtime);
+
+                    if(kill(pidToMonitor, 0) == 0) {
+                        killPid(pidToMonitor);
+                        numKilled = 1;
+                    }
+                    char buff[5];
+                    snprintf(buff, 5, "%d", numKilled);
+                    write(worker.toParent.readWrite[WRITE_PIPE], buff, strlen(buff));
+                }
+                fclose(fromParent);
+                exit(EXIT_SUCCESS);
             }
             break;
         default:    //Parent
             break;
     }
 
+    close(worker.toChild.readWrite[READ_PIPE]);
+    close(worker.toParent.readWrite[WRITE_PIPE]);
+
+    //set to non blocking read of writes from child
+    int flags = fcntl(worker.toParent.readWrite[READ_PIPE], F_GETFL, 0);
+    flags |= O_NONBLOCK;
+    fcntl(worker.toParent.readWrite[READ_PIPE], F_SETFL, flags);
+
+
     worker.childPid = forkResult;
     ll_add(&childProccesses, &worker);
-
-    return (ChildProcess*) ll_getIf(&childProccesses, &getChildPredicate);
+    ChildProcess* retVal = (ChildProcess*) ll_getIf(&childProccesses, &getChildPredicate);
+    return retVal;
 
 }
 
 void checkOnChild(void *childProcess) {
- // todo fill this in
-
-//    for each child in childProcs:
-//        check childProcess is done
-//            if so:
-//                set to available and add 1 to total procs killed if it happened in chil
-//                Log anything if necessary
-//                find corresponding monitoredProccess (based on pid) and remove from MonitoredProccesses ll
-
+    ChildProcess* child = (ChildProcess*) childProcess;
+    if (child->isAvailable == false) {
+        char command[255];
+        if (read(child->toParent.readWrite[READ_PIPE], command, 255) == -1) {
+            return;
+        }
+        int numKilled = 0;
+        sscanf(command, "%d\n", &numKilled);
+        if (numKilled != 0) {
+            numProcessesKilled+=numKilled;
+            LogMessage msg;
+            snprintf(msg.message, LOG_MESSAGE_LENGTH, "PID %d (%s) killed after exceeding %d seconds.",
+                     child->processPid, child->processName, child->runtime);
+            logToFile("Action", msg.message, false);
+        }
+        child->isAvailable = true;
+        MonitoredProcess temp;
+        temp.processPid = child->processPid;
+        ll_remove(&monitoredProccesses, &temp);
+    }
 }
 
 void killChild(void *childProcess) {
