@@ -34,7 +34,7 @@
 #define WRITE_PIPE 1
 
 typedef struct _Pipe {
-    int readWrite[2]; // read 0, write 1
+    int readWrite[2]; // read READ_PIPE, write WRITE_PIPE
 } Pipe;
 
 typedef struct _LogMessage {
@@ -54,7 +54,6 @@ typedef struct _ChildProcess {
     pid_t processPid;
     char processName[PROGRAM_NAME_LENGTH];
     unsigned int runtime;
-
 } ChildProcess;
 
 typedef struct _MonitoredProcess {
@@ -70,10 +69,9 @@ int pnMain(int argc, char* argv[]);
 void beginProcNanny();
 void checkInputs(int args, char* argv[]);
 void exitError(const char* errorMessage);
-void forkMonitorProcess(const char *process, unsigned int monitorTime);
 void cleanUp();
 void checkForNewMonitoredProcesses();
-void checkOnChild(void* childProcess);
+void checkChild(void *childProcess);
 void getCurrentTime(char* buffer);
 void getPids(const char* processName, pid_t pids[MAX_PROCESSES]);
 void initializeChild(ChildProcess* childWorker, MonitoredProcess* processToBeMonitored);
@@ -81,19 +79,14 @@ void killChild(void* childProcess);
 void killPid(pid_t pid);
 void killAllProcNannys();
 void logToFile(const char* type, const char* msg, bool logToSTDOUT);
-void monitorProcess(const char *process, unsigned int monitorTime);
-void monitorNewProccesses(void* monitoredProcess);
+void monitorNewProcesses(void *monitoredProcess);
 void readConfigurationFile();
-void readPipes();
 void signalHandler(int signo);
 void trimWhitespace(char* str);
-void writeToPipe(Pipe* pPipe, const char* message);
 
-bool monitoredProccessComparator(void* mp1, void * mp2);
+bool monitoredProcessComparator(void *mp1, void *mp2);
 bool getChildPredicate(void* childProcess);
 
 ChildProcess* spawnNewChildWorker();
-
-
 
 #endif //PROC_NANNY_H

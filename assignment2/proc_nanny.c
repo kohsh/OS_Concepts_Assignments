@@ -24,7 +24,6 @@
 #include <signal.h>
 #include <ctype.h>
 #include <time.h>
-#include <sys/poll.h>
 #include <fcntl.h>
 #include "proc_nanny.h"
 #include "linked_list.h"
@@ -35,15 +34,12 @@ bool receivedSIGINT = false;
 bool receivedSIGALARM = false;
 
 int numProcessesKilled = 0;
-Pipe totalKilledProcesses;
-Pipe logMessages;
-
 char logLocation[512];
 char configFileLocation[512];
 
 ProgramConfig configLines[CONFIG_FILE_LINES];
-List monitoredProccesses;
-List childProccesses;
+List monitoredProcesses;
+List childProcesses;
 
 int pnMain(int args, char* argv[]) {
 
@@ -62,6 +58,24 @@ int pnMain(int args, char* argv[]) {
     beginProcNanny();
     cleanUp();
     exit(EXIT_SUCCESS);
+}
+
+void signalHandler(int signo)
+{
+    switch (signo) {
+        case SIGINT:
+            receivedSIGINT = true;
+            break;
+        case SIGHUP:
+            receivedSIGHUP = true;
+            break;
+        case SIGALRM:
+            receivedSIGALARM = true;
+            alarm(REFRESH_RATE);
+            break;
+        default:
+            break;
+    }
 }
 
 void killAllProcNannys() {
@@ -110,23 +124,14 @@ void readConfigurationFile() {
 }
 
 void beginProcNanny() {
-
-    if (pipe(totalKilledProcesses.readWrite) != 0) {
-        exitError("pipe error");
-    }
-
-    if (pipe(logMessages.readWrite) != 0) {
-        exitError("pipe error");
-    }
-
-    ll_init(&monitoredProccesses, sizeof(MonitoredProcess), &monitoredProccessComparator);
-    ll_init(&childProccesses, sizeof(ChildProcess), NULL);
+    ll_init(&monitoredProcesses, sizeof(MonitoredProcess), &monitoredProcessComparator);
+    ll_init(&childProcesses, sizeof(ChildProcess), NULL);
     checkForNewMonitoredProcesses();
     alarm(REFRESH_RATE);
 
     while(true) {
-        ll_forEach(&monitoredProccesses, &monitorNewProccesses);
-        ll_forEach(&childProccesses, &checkOnChild);
+        ll_forEach(&monitoredProcesses, &monitorNewProcesses);
+        ll_forEach(&childProcesses, &checkChild);
 
         if (receivedSIGHUP) {
             receivedSIGHUP = false;
@@ -143,12 +148,6 @@ void beginProcNanny() {
             logToFile(type, msg.message, true);
         }
 
-        if (receivedSIGALARM) {
-            receivedSIGALARM = false;
-            checkForNewMonitoredProcesses();
-            alarm(REFRESH_RATE);
-        }
-
         if (receivedSIGINT) {
             receivedSIGINT = false;
             cleanUp();
@@ -159,137 +158,19 @@ void beginProcNanny() {
             logToFile("Info", msg.message, true);
             exit(EXIT_SUCCESS);
         }
-    }
-}
 
-void forkMonitorProcess(const char *process, unsigned int monitorTime) {
-    __pid_t forkResult = fork();
-
-    switch(forkResult) {
-        case -1:    //Error
-            exitError("ERROR: error in monitoring process");
-            break;
-        case 0:     //Child
-            monitorProcess(process, monitorTime);
-            break;
-        default:    //Parent
-            break;
-    }
-}
-
-void monitorProcess(const char *process, unsigned int monitorTime) {
-    close(logMessages.readWrite[READ_PIPE]);
-    close(totalKilledProcesses.readWrite[READ_PIPE]);
-
-    pid_t processPids[MAX_PROCESSES] = {-1};
-    getPids(process, processPids);
-    int numberKilledProcesses = 0;
-    int numberFoundProcesses = 0;
-
-    for(int i = 0; i < MAX_PROCESSES; i++) {
-
-        if (processPids[i] > 0) {
-            char timeBuffer[TIME_BUFFER_SIZE];
-            getCurrentTime(timeBuffer);
-            LogMessage logMsg;
-            snprintf(logMsg.message, LOG_MESSAGE_LENGTH,
-                     "[%s] Info: Initializing monitoring of process '%s' (PID %d).\n",
-                     timeBuffer, process, processPids[i]);
-            writeToPipe(&logMessages, logMsg.message);
-            numberFoundProcesses++;
+        if (receivedSIGALARM) {
+            receivedSIGALARM = false;
+            checkForNewMonitoredProcesses();
+            alarm(REFRESH_RATE);
         }
     }
-
-    if (numberFoundProcesses == 0) {
-        char timeBuffer[TIME_BUFFER_SIZE];
-        getCurrentTime(timeBuffer);
-        LogMessage msg;
-        snprintf(msg.message, LOG_MESSAGE_LENGTH, "[%s] Info: No '%s' processes found.\n"
-                , timeBuffer, process);
-        writeToPipe(&logMessages, msg.message);
-        close(logMessages.readWrite[WRITE_PIPE]);
-        close(totalKilledProcesses.readWrite[WRITE_PIPE]);
-        cleanUp();
-        _exit(0);
-    }
-
-    sleep(monitorTime);
-
-    for(int i = 0; i < MAX_PROCESSES; i++) {
-
-        if (processPids[i] > 0 && processPids[i] != getpid()) {
-            if(kill(processPids[i], 0) == 0) {
-                killPid(processPids[i]);
-                char timeBuffer[TIME_BUFFER_SIZE];
-                getCurrentTime(timeBuffer);
-                LogMessage logMsg;
-
-                snprintf(logMsg.message, LOG_MESSAGE_LENGTH,
-                         "[%s] Action: PID %d (%s) killed after exceeding %d seconds.\n",
-                         timeBuffer, processPids[i], process, monitorTime);
-                writeToPipe(&logMessages, logMsg.message);
-                numberKilledProcesses++;
-            }
-        }
-    }
-
-    close(logMessages.readWrite[WRITE_PIPE]);
-
-    char numberBuffer[20];
-    snprintf(numberBuffer, 20, "%d\n", numberKilledProcesses);
-    writeToPipe(&totalKilledProcesses, numberBuffer);
-    close(totalKilledProcesses.readWrite[WRITE_PIPE]);
-
-    cleanUp();
-    _exit(0);
-}
-
-void writeToPipe(Pipe *pPipe, const char *message) {
-    write(pPipe->readWrite[WRITE_PIPE], message, strlen(message));
-}
-
-void readPipes() {
-    close(logMessages.readWrite[WRITE_PIPE]);          // don't need to write to the pipe
-    close(totalKilledProcesses.readWrite[WRITE_PIPE]); // don't need to write to the pipe
-
-    char byte;
-    FILE* log = fopen(logLocation, "a");
-
-    while (read(logMessages.readWrite[READ_PIPE], &byte, 1) != 0) {
-        fputc(byte, log);
-    }
-
-    fclose(log);
-    close(logMessages.readWrite[READ_PIPE]);
-
-    FILE*totalKilledFP = fdopen(totalKilledProcesses.readWrite[READ_PIPE], "r");
-    char numberString[10];
-    int numberInteger = 0;
-    int processesKilled = 0;
-    while(fgets(numberString, 10, totalKilledFP) != NULL) {
-        sscanf(numberString, "%d", &numberInteger);
-        processesKilled += numberInteger;
-        numberInteger = 0;
-    }
-
-    char timebuffer[TIME_BUFFER_SIZE];
-    getCurrentTime(timebuffer);
-    LogMessage logMsg;
-    snprintf(logMsg.message, LOG_MESSAGE_LENGTH,
-             "[%s] Info: Exiting. %d process(es) killed.\n",
-             timebuffer, processesKilled);
-
-    log = fopen(logLocation, "a");
-    fprintf(log, "%s", logMsg.message);
-    fclose(log);
-    fclose(totalKilledFP);
-    close(totalKilledProcesses.readWrite[READ_PIPE]);
 }
 
 void cleanUp() {
-    ll_forEach(&childProccesses, &killChild);
-    ll_free(&monitoredProccesses);
-    ll_free(&childProccesses);
+    ll_forEach(&childProcesses, &killChild);
+    ll_free(&monitoredProcesses);
+    ll_free(&childProcesses);
 }
 
 void exitError(const char *errorMessage) {
@@ -397,7 +278,7 @@ void killPid(pid_t pid) {
     system(buff);
 }
 
-bool monitoredProccessComparator(void *mp1, void *mp2) {
+bool monitoredProcessComparator(void *mp1, void *mp2) {
     MonitoredProcess* first = (MonitoredProcess*) mp1;
     MonitoredProcess* second = (MonitoredProcess*) mp2;
 
@@ -406,24 +287,6 @@ bool monitoredProccessComparator(void *mp1, void *mp2) {
     }
 
     return false;
-}
-
-void signalHandler(int signo)
-{
-    switch (signo) {
-        case SIGINT:
-            receivedSIGINT = true;
-            break;
-        case SIGHUP:
-            receivedSIGHUP = true;
-            break;
-        case SIGALRM:
-            receivedSIGALARM = true;
-            alarm(REFRESH_RATE);
-            break;
-        default:
-            break;
-    }
 }
 
 void checkForNewMonitoredProcesses() {
@@ -439,7 +302,7 @@ void checkForNewMonitoredProcesses() {
                     temp.processPid = pids[j];
                     temp.runtime = configLines[i].runtime;
                     temp.beingMonitored = false;
-                    ll_add_unique(&monitoredProccesses, &temp);
+                    ll_add_unique(&monitoredProcesses, &temp);
                     numberFound++;
                 }
             }
@@ -454,10 +317,10 @@ void checkForNewMonitoredProcesses() {
     }
 }
 
-void monitorNewProccesses(void* monitoredProcess) {
+void monitorNewProcesses(void *monitoredProcess) {
     MonitoredProcess* process = (MonitoredProcess*) monitoredProcess;
     if (process->beingMonitored == false) {
-        ChildProcess* worker = ll_getIf(&childProccesses, &getChildPredicate);
+        ChildProcess* worker = ll_getIf(&childProcesses, &getChildPredicate);
         if (worker == NULL) {
             worker = spawnNewChildWorker();
         }
@@ -501,8 +364,8 @@ ChildProcess *spawnNewChildWorker() {
         case 0:     //Child
             close(worker.toChild.readWrite[WRITE_PIPE]);
             close(worker.toParent.readWrite[READ_PIPE]);
-            ll_free(&monitoredProccesses);
-            ll_free(&childProccesses);
+            ll_free(&monitoredProcesses);
+            ll_free(&childProcesses);
             while(true) {
                 FILE* fromParent = fdopen(worker.toChild.readWrite[READ_PIPE], "r");
                 char command[255];
@@ -536,20 +399,18 @@ ChildProcess *spawnNewChildWorker() {
     close(worker.toChild.readWrite[READ_PIPE]);
     close(worker.toParent.readWrite[WRITE_PIPE]);
 
-    //set to non blocking read of writes from child
+    // set to non blocking read of writes from child
     int flags = fcntl(worker.toParent.readWrite[READ_PIPE], F_GETFL, 0);
     flags |= O_NONBLOCK;
     fcntl(worker.toParent.readWrite[READ_PIPE], F_SETFL, flags);
 
-
     worker.childPid = forkResult;
-    ll_add(&childProccesses, &worker);
-    ChildProcess* retVal = (ChildProcess*) ll_getIf(&childProccesses, &getChildPredicate);
-    return retVal;
+    ll_add(&childProcesses, &worker);
 
+    return (ChildProcess*) ll_getIf(&childProcesses, &getChildPredicate);
 }
 
-void checkOnChild(void *childProcess) {
+void checkChild(void *childProcess) {
     ChildProcess* child = (ChildProcess*) childProcess;
     if (child->isAvailable == false) {
         char command[255];
@@ -568,7 +429,7 @@ void checkOnChild(void *childProcess) {
         child->isAvailable = true;
         MonitoredProcess temp;
         temp.processPid = child->processPid;
-        ll_remove(&monitoredProccesses, &temp);
+        ll_remove(&monitoredProcesses, &temp);
     }
 }
 
