@@ -124,6 +124,10 @@ void readConfigurationFile() {
 }
 
 void beginProcNanny() {
+    LogMessage parentMsg;
+    snprintf(parentMsg.message, LOG_MESSAGE_LENGTH, "Parent process is PID %d.", getpid());
+    logToFile("Info", parentMsg.message, false);
+
     ll_init(&monitoredProcesses, sizeof(MonitoredProcess), &monitoredProcessComparator);
     ll_init(&childProcesses, sizeof(ChildProcess), NULL);
     checkForNewMonitoredProcesses();

@@ -12,10 +12,7 @@ clean:
 	$(RM) procnanny test15 test5 testLong *.o *.out *.log *.tar
 	
 test: procnanny test5 test15 testLong
-	chmod +x launchTestProcesses.sh
-	./launchTestProcesses.sh&
-	PROCNANNYLOGS="./pn.log" ./procnanny testInput.config
-	cat pn.log
+	$(info test programs built)
 
 test5: test5.c
 	gcc -o test5 test5.c
@@ -27,4 +24,4 @@ testLong: test.c
 	gcc -o testLong test.c
 
 tar:
-	tar cfv submit.tar README.md Makefile main.c proc_nanny.c proc_nanny.h
+	tar cfv submit.tar README.md Makefile main.c proc_nanny.c proc_nanny.h linked_list.c linked_list.h
