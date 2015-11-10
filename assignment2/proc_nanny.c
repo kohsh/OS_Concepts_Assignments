@@ -32,6 +32,7 @@
 bool receivedSIGHUP = false;
 bool receivedSIGINT = false;
 bool receivedSIGALARM = false;
+bool firstConfigurationReRead = false;
 
 int numProcessesKilled = 0;
 char logLocation[512];
@@ -130,7 +131,8 @@ void beginProcNanny() {
 
     ll_init(&monitoredProcesses, sizeof(MonitoredProcess), &monitoredProcessComparator);
     ll_init(&childProcesses, sizeof(ChildProcess), NULL);
-    checkForNewMonitoredProcesses();
+    firstConfigurationReRead = true;
+    checkForNewMonitoredProcesses(firstConfigurationReRead);
     alarm(REFRESH_RATE);
 
     while(true) {
@@ -150,6 +152,8 @@ void beginProcNanny() {
                      configFileLocation);
             char type[] = "Info";
             logToFile(type, msg.message, true);
+
+            firstConfigurationReRead = true;
         }
 
         if (receivedSIGINT) {
@@ -165,7 +169,7 @@ void beginProcNanny() {
 
         if (receivedSIGALARM) {
             receivedSIGALARM = false;
-            checkForNewMonitoredProcesses();
+            checkForNewMonitoredProcesses(firstConfigurationReRead);
             alarm(REFRESH_RATE);
         }
     }
@@ -293,7 +297,7 @@ bool monitoredProcessComparator(void *mp1, void *mp2) {
     return false;
 }
 
-void checkForNewMonitoredProcesses() {
+void checkForNewMonitoredProcesses(bool logNoProcessesFound) {
     for (int i = 0; i < CONFIG_FILE_LINES; i++) {
         if (strlen(configLines[i].programName) != 0) {
             pid_t pids[MAX_PROCESSES] = {-1};
@@ -310,15 +314,16 @@ void checkForNewMonitoredProcesses() {
                     numberFound++;
                 }
             }
-            // TODO : determine if this is needed
-//            if (numberFound == 0) {
-//                LogMessage msg;
-//                snprintf(msg.message, LOG_MESSAGE_LENGTH, "No '%s' processes found."
-//                        , configLines[i].programName);
-//                logToFile("Info", msg.message, false);
-//            }
+            if (logNoProcessesFound && numberFound == 0) {
+                LogMessage msg;
+                snprintf(msg.message, LOG_MESSAGE_LENGTH, "No '%s' processes found."
+                        , configLines[i].programName);
+                logToFile("Info", msg.message, false);
+            }
         }
     }
+
+    firstConfigurationReRead = false;
 }
 
 void monitorNewProcesses(void *monitoredProcess) {

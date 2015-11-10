@@ -70,7 +70,7 @@ void beginProcNanny();
 void checkInputs(int args, char* argv[]);
 void exitError(const char* errorMessage);
 void cleanUp();
-void checkForNewMonitoredProcesses();
+void checkForNewMonitoredProcesses(bool logNoProcessesFound);
 void checkChild(void *childProcess);
 void getCurrentTime(char* buffer);
 void getPids(const char* processName, pid_t pids[MAX_PROCESSES]);
