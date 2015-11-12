@@ -27,6 +27,7 @@
 #include <netinet/in.h>
 #include <bits/errno.h>
 #include <asm-generic/errno-base.h>
+#include <fcntl.h>
 #include "proc_nanny_server.h"
 #include "linked_list.h"
 #include "memwatch.h"
@@ -37,6 +38,8 @@ bool receivedSIGALARM = false;
 bool firstConfigurationReRead = false;
 
 int numProcessesKilled = 0;
+
+int selfPipe[2];
 
 char logLocation[512];
 char serverInfoLocation[512];
@@ -79,6 +82,8 @@ void signalHandler(int signo) {
         default:
             break;
     }
+
+    write(selfPipe[1], "x", 1);
 }
 
 void checkInputs(int args, char* argv[]) {
@@ -173,11 +178,14 @@ void readConfigurationFile() {
 
     int index = 0;
 
+    for (int i = 0; i < CONFIG_FILE_LINES; i++) {
+        configLines[i].runtime = 0;
+        strcpy(configLines[i].programName, "");
+    }
+
     while ((charsRead = getline(&line, &len, fp)) != -1) {
-        char tempBuff[512];
-        strncpy(tempBuff, line, (size_t) charsRead);
-        int numMatched = sscanf(tempBuff, "%s %d", configLines[index].programName, &configLines[index].runtime);
-        if (numMatched != 2) {
+        int numMatched = sscanf(line, "%s %d", configLines[index].programName, &configLines[index].runtime);
+        if (numMatched == 1 || numMatched > 2) {
             LogMessage msg;
             snprintf(msg.message, LOG_MESSAGE_LENGTH,
                      "Expected two configuration arguments at line %d of %s.",
@@ -186,7 +194,9 @@ void readConfigurationFile() {
             cleanUp();
             exit(EXIT_FAILURE);
         }
-        trimWhitespace(configLines[index].programName);
+        if (strlen(configLines[index].programName) !=0) {
+            trimWhitespace(configLines[index].programName);
+        }
         index++;
         if (index >= CONFIG_FILE_LINES) {
             break;
@@ -240,12 +250,31 @@ void beginProcNanny() {
     fprintf(log, "NODE %s PID %d PORT %d\n", name, getpid(), PORT);
     fclose(log);
 
+    // setup self pipe
+    pipe(selfPipe);
+
+    int flags = fcntl(selfPipe[0], F_GETFL);
+    flags |= O_NONBLOCK;
+    fcntl(selfPipe[0], F_SETFL, flags);
+
+    flags = fcntl(selfPipe[1], F_GETFL);
+    flags |= O_NONBLOCK;
+    fcntl(selfPipe[1], F_SETFL, flags);
+
+
+
+
+
     /* Accept */
 
     while (1) {
         FD_ZERO(&readable);
         FD_SET(serverSocket, &readable);
         max_sd = serverSocket;
+
+        FD_SET(selfPipe[0], &readable);
+        if (selfPipe[0] > max_sd)
+            max_sd = selfPipe[0];
 
         //add child sockets to set
         for (int i = 0 ; i < 32 ; i++)
@@ -262,64 +291,65 @@ void beginProcNanny() {
                 max_sd = sd;
         }
 
-        if (receivedSIGHUP) {
-            receivedSIGHUP = false;
-            for (int i = 0; i < CONFIG_FILE_LINES; i++) {
-                configLines[i].runtime = 0;
-                strcpy(configLines[i].programName, "");
-            }
-            readConfigurationFile();
-
-            for (int i = 0; i < 32; i++) {
-                int sd = clientSockets[i];
-                if (sd == 0) {
-                    printf("not a good sd\n");
-                    fflush(stdout);
-                    continue;
-
-                }
-                for(int j = 0; j < CONFIG_FILE_LINES; j++) {
-                    if (strlen(configLines[j].programName) != 0) {
-                        char buffer[1024];
-                        snprintf(buffer, 1024, "%s %d\n", configLines[j].programName, configLines[j].runtime);
-                        send(newSocket, buffer, strlen(buffer), 0);
-                    }
-                }
-            }
-
-            LogMessage msg;
-            snprintf(msg.message, LOG_MESSAGE_LENGTH,
-                     "Caught SIGHUP. Configuration file '%s' re-read.",
-                     configFileLocation);
-            char type[] = "Info";
-            logToFile(type, msg.message, true);
-        }
-
-        if (receivedSIGINT) {
-            receivedSIGINT = false;
-            cleanUp();
-            for (int i = 0; i < 32; i++) {
-                int sd = clientSockets[i];
-                char msg[] = "___KILL___ 0";
-                send(sd, msg, strlen(msg), 0);
-                close(sd);
-            }
-            LogMessage msg;
-            snprintf(msg.message, LOG_MESSAGE_LENGTH,
-                     "Caught SIGINT. Exiting cleanly. %d process(es) killed.",
-                     numProcessesKilled);
-            logToFile("Info", msg.message, true);
-            exit(EXIT_SUCCESS);
-        }
-
         struct timeval tv;
-        tv.tv_sec = 1;
+        tv.tv_sec = 0;
         tv.tv_usec = 0;
 
-        int activity = select( max_sd + 1 , &readable , NULL , NULL , &tv);
+//        int activity = select(max_sd + 1 , &readable , NULL , NULL , &tv);
+        int activity = select(max_sd + 1 , &readable , NULL , NULL , NULL);
+
+        // check the self pipe
+        if (FD_ISSET(selfPipe[0], &readable)) {
+            char ch;
+            while(read(selfPipe[0], &ch, 1) != -1) {}
+
+            if (receivedSIGHUP) {
+                receivedSIGHUP = false;
+                readConfigurationFile();
+
+                for (int i = 0; i < 32; i++) {
+                    int sd = clientSockets[i];
+                    if (sd == 0) {
+                        continue;
+                    }
+
+                    for(int j = 0; j < CONFIG_FILE_LINES; j++) {
+                        if (strlen(configLines[j].programName) != 0) {
+                            char buffer[1024];
+                            snprintf(buffer, 1024, "%s %d\n", configLines[j].programName, configLines[j].runtime);
+                            send(newSocket, buffer, strlen(buffer), 0);
+                        }
+                    }
+                }
+
+                LogMessage msg;
+                snprintf(msg.message, LOG_MESSAGE_LENGTH,
+                         "Caught SIGHUP. Configuration file '%s' re-read.",
+                         configFileLocation);
+                char type[] = "Info";
+                logToFile(type, msg.message, true);
+            }
+
+            if (receivedSIGINT) {
+                receivedSIGINT = false;
+                cleanUp();
+                for (int i = 0; i < 32; i++) {
+                    int sd = clientSockets[i];
+                    char msg[] = "___KILL___ 0\n";
+                    send(sd, msg, strlen(msg), 0);
+                    close(sd);
+                }
+                LogMessage msg;
+                snprintf(msg.message, LOG_MESSAGE_LENGTH,
+                         "Caught SIGINT. Exiting cleanly. %d process(es) killed.",
+                         numProcessesKilled);
+                logToFile("Info", msg.message, true);
+                exit(EXIT_SUCCESS);
+            }
+        }
 
         //If something happened on the master socket , then its an incoming connection
-        if (FD_ISSET(serverSocket, &readable)) {
+        else if (FD_ISSET(serverSocket, &readable)) {
             if ((newSocket = accept(serverSocket, NULL, NULL))<0) {
                 printf("Error with accept");
                 exit(EXIT_FAILURE);
@@ -336,9 +366,6 @@ void beginProcNanny() {
             }
 
             // send the program configuration
-//            char start[] = "CONFIG_START\n";
-//            char end[] = "CONFIG_END\n";
-//            send(newSocket, start , strlen(start), 0);
             for(int i = 0; i < CONFIG_FILE_LINES; i++) {
                 if (strlen(configLines[i].programName) != 0) {
                     char buffer[1024];
@@ -346,26 +373,27 @@ void beginProcNanny() {
                     send(newSocket, buffer, strlen(buffer), 0);
                 }
             }
-//            send(newSocket, end, strlen(end), 0);
         }
 
-        //else, we have some data to read from a child
-        for (int i = 0; i < 32; i++) {
-            int sd = clientSockets[i];
-            ssize_t valread;
-            char buffer[1024];
+        else {
+            //else, we have some data to read from a child
+            for (int i = 0; i < 32; i++) {
+                int sd = clientSockets[i];
+                ssize_t valread;
+                char buffer[1024];
 
-            if (FD_ISSET( sd , &readable)) {
-                // Check if it was for closing
-                if ((valread = read( sd , buffer, 1024)) == 0) {
-                    close( sd );
-                    clientSockets[i] = 0;
-                }
+                if (FD_ISSET(sd, &readable)) {
+                    // Check if it was for closing
+                    if ((valread = read(sd, buffer, 1024)) == 0) {
+                        close(sd);
+                        clientSockets[i] = 0;
+                    }
 
-                // log the message
-                else {
-                    buffer[valread] = '\0';
-                    logToFileSimple(buffer);
+                    // log the message
+                    else {
+                        buffer[valread] = '\0';
+                        logToFileSimple(buffer);
+                    }
                 }
             }
         }

@@ -143,24 +143,25 @@ void readConfigurationFromServer(struct timeval * tv) {
         }
 
         char buff[2048];
+        sleep(2);
         read(server, buff, 2048);
         int charsRead = 0;
         char program[64];
         unsigned int runtime;
         int extra;
         int i =0;
-        printf("hellooo\n");
-        fflush(stdout);
         while(0 < sscanf(buff + charsRead, "%s %d\n%n", program, &runtime, &extra)) {
             if (strcmp(program, "___KILL___") == 0) {
                 cleanUp();
+                exit(EXIT_SUCCESS);
             }
             strcpy(configLines[i].programName, program);
             configLines[i].runtime = runtime;
             i++;
             charsRead += extra;
         }
-
+        printf("re-readconfig\n");
+        fflush(stdout);
     }
 }
 
@@ -172,13 +173,13 @@ void beginProcNanny() {
     alarm(REFRESH_RATE);
 
     struct timeval tv;
-    tv.tv_sec = 1;
+    tv.tv_sec = 0;
     tv.tv_usec = 0;
 
     while(true) {
         ll_forEach(&monitoredProcesses, &monitorNewProcesses);
         ll_forEach(&childProcesses, &checkChild);
-        //readConfigurationFromServer(&tv);
+        readConfigurationFromServer(&tv);
 
         if (receivedSIGALARM) {
             receivedSIGALARM = false;
