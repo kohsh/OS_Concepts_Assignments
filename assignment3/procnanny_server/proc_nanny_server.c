@@ -281,8 +281,12 @@ void beginProcNanny() {
             exit(EXIT_SUCCESS);
         }
 
+        struct timeval tv;
+        tv.tv_sec = 1;
+        tv.tv_usec = 0;
+
         //wait for an activity on one of the sockets , timeout is NULL , so wait indefinitely
-        int activity = select( max_sd + 1 , &readable , NULL , NULL , NULL);
+        int activity = select( max_sd + 1 , &readable , NULL , NULL , &tv);
 
         if ((activity < 0))
         {

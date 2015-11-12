@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "proc_nanny.h"
+#include "proc_nanny_client.h"
 #include "memwatch.h"
 
 int main(int args, char* argv[]) {

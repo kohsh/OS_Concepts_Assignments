@@ -1,17 +1,17 @@
 CC = gcc
 CFLAGS  = -std=c99 -Wall -DMEMWATCH -DMW_STDIO
-SRCS = main.c memwatch.c proc_nanny.c linked_list.c
-INCLUDES = proc_nanny.h memwatch.h linked_list.h
+SRCS = main.c memwatch.c proc_nanny_client.c linked_list.c
+INCLUDES = memwatch.h proc_nanny_client.h linked_list.h
 
-all: procnanny
+all: procnanny.client
 
-procnanny: $(SRCS) $(INCLUDES)
-	$(CC) $(CFLAGS) $(SRCS) -o procnanny
+procnanny.client: $(SRCS) $(INCLUDES)
+	$(CC) $(CFLAGS) $(SRCS) -o procnanny.client
 	
 clean: 
-	$(RM) procnanny test15 test5 testLong *.o *.out *.log *.tar
+	$(RM) procnanny.client test15 test5 testLong *.o *.out *.log *.tar
 	
-test: procnanny test5 test15 testLong
+test: procnanny.client test5 test15 testLong
 	$(info test programs built)
 
 test5: test5.c
@@ -24,4 +24,4 @@ testLong: test.c
 	gcc -o testLong test.c
 
 tar:
-	tar cfv submit.tar README.md Makefile main.c proc_nanny.c proc_nanny.h linked_list.c linked_list.h
+	tar cfv submit.tar README.md Makefile main.c proc_nanny_client.c proc_nanny_client.h linked_list.c linked_list.h
