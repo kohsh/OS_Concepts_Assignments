@@ -34,5 +34,6 @@
 
 #procnanny specific
 *.log
+*.info
 procnanny
 .idea/
