@@ -206,11 +206,10 @@ void beginProcNanny() {
     int max_sd;
 
     fd_set readable;
-//    fd_set writable;
 
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = INADDR_ANY;
-    server.sin_port = htons(8888);
+    server.sin_port = htons(PORT);
 
     /* Create Socket */
     serverSocket = socket(AF_INET, SOCK_STREAM, 0);
@@ -230,6 +229,16 @@ void beginProcNanny() {
         perror("Failed to listen for connections");
         return;
     }
+
+    LogMessage msg;
+    char name[64];
+    gethostname(name, 64);
+    snprintf(msg.message, LOG_MESSAGE_LENGTH, "PID %d on node %s, port %d", getpid(), name, PORT);
+    logToFile("procnanny server", msg.message, true);
+
+    FILE* log = fopen(serverInfoLocation, "w");
+    fprintf(log, "NODE %s PID %d PORT %d\n", name, getpid(), PORT);
+    fclose(log);
 
     /* Accept */
 

@@ -23,6 +23,7 @@
 #include <sys/types.h>
 #include <stdbool.h>
 
+#define PORT 8888
 #define REFRESH_RATE 5
 #define MAX_PROCESSES 1024
 #define CONFIG_FILE_LINES 256
