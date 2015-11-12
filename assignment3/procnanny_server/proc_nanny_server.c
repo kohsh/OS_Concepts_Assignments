@@ -269,7 +269,18 @@ void beginProcNanny() {
                 strcpy(configLines[i].programName, "");
             }
             readConfigurationFile();
-            // todo : send out config to all available clients
+
+            for (int i = 0; i < 32; i++) {
+                int sd = clientSockets[i];
+                for(int i = 0; i < CONFIG_FILE_LINES; i++) {
+                    if (strlen(configLines[i].programName) != 0) {
+                        char buffer[1024];
+                        snprintf(buffer, 1024, "%s %d\n", configLines[i].programName, configLines[i].runtime);
+                        send(newSocket, buffer, strlen(buffer), 0);
+                    }
+                }
+            }
+
             LogMessage msg;
             snprintf(msg.message, LOG_MESSAGE_LENGTH,
                      "Caught SIGHUP. Configuration file '%s' re-read.",
@@ -281,7 +292,12 @@ void beginProcNanny() {
         if (receivedSIGINT) {
             receivedSIGINT = false;
             cleanUp();
-            // todo : send kill message to all sockets and close them
+            for (int i = 0; i < 32; i++) {
+                int sd = clientSockets[i];
+                char msg[] = "___KILL___ 0";
+                send(sd, msg, strlen(msg), 0);
+                close(sd);
+            }
             LogMessage msg;
             snprintf(msg.message, LOG_MESSAGE_LENGTH,
                      "Caught SIGINT. Exiting cleanly. %d process(es) killed.",
@@ -294,27 +310,22 @@ void beginProcNanny() {
         tv.tv_sec = 1;
         tv.tv_usec = 0;
 
-        //wait for an activity on one of the sockets , timeout is NULL , so wait indefinitely
         int activity = select( max_sd + 1 , &readable , NULL , NULL , &tv);
 
-        if ((activity < 0))
-        {
+        if ((activity < 0)) {
             printf("Error with select");
             exit(EXIT_FAILURE);
         }
 
         //If something happened on the master socket , then its an incoming connection
-        if (FD_ISSET(serverSocket, &readable))
-        {
-            if ((newSocket = accept(serverSocket, NULL, NULL))<0)
-            {
+        if (FD_ISSET(serverSocket, &readable)) {
+            if ((newSocket = accept(serverSocket, NULL, NULL))<0) {
                 printf("Error with accept");
                 exit(EXIT_FAILURE);
             }
 
             //add new socket to array of sockets
-            for (int i = 0; i < 32; i++)
-            {
+            for (int i = 0; i < 32; i++) {
                 //if position is empty
                 if( clientSockets[i] == 0 )
                 {
@@ -338,17 +349,14 @@ void beginProcNanny() {
         }
 
         //else, we have some data to read from a child
-        for (int i = 0; i < 32; i++)
-        {
+        for (int i = 0; i < 32; i++) {
             int sd = clientSockets[i];
             int valread;
             char buffer[1024];
 
-            if (FD_ISSET( sd , &readable))
-            {
+            if (FD_ISSET( sd , &readable)) {
                 // Check if it was for closing , and also read the incoming message
-                if ((valread = read( sd , buffer, 1024)) == 0)
-                {
+                if ((valread = read( sd , buffer, 1024)) == 0) {
                     //Somebody disconnected , get his details and print
                     getpeername(sd , (struct sockaddr*)&client , (socklen_t*)&clientLength);
                     //Close the socket and mark as 0 in list for reuse
@@ -357,8 +365,7 @@ void beginProcNanny() {
                 }
 
                 // log the client's message
-                else
-                {
+                else {
                     //set the string terminating NULL byte on the end of the data read
                     buffer[valread] = '\0';
                     logToFileSimple(buffer);
