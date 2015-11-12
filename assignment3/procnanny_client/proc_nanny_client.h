@@ -33,6 +33,8 @@
 #define READ_PIPE 0
 #define WRITE_PIPE 1
 
+struct timeval;
+
 typedef struct _Pipe {
     int readWrite[2]; // read READ_PIPE, write WRITE_PIPE
 } Pipe;

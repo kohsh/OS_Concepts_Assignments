@@ -136,6 +136,10 @@ void readConfigurationFromServer(struct timeval * tv) {
 
     int activity = select( max_sd + 1 , &readable , NULL , NULL , tv);
 
+    if (activity == -1) {
+        return;
+    }
+
     if (FD_ISSET(server, &readable)) {
         for (int i = 0; i < CONFIG_FILE_LINES; i++) {
             configLines[i].runtime = 0;
@@ -160,15 +164,14 @@ void readConfigurationFromServer(struct timeval * tv) {
             i++;
             charsRead += extra;
         }
-        printf("re-readconfig\n");
-        fflush(stdout);
+        firstConfigurationReRead = true;
     }
 }
 
 void beginProcNanny() {
     ll_init(&monitoredProcesses, sizeof(MonitoredProcess), &monitoredProcessComparator);
     ll_init(&childProcesses, sizeof(ChildProcess), NULL);
-    firstConfigurationReRead = false;
+    firstConfigurationReRead = true;
     checkForNewMonitoredProcesses(firstConfigurationReRead);
     alarm(REFRESH_RATE);
 
@@ -282,12 +285,14 @@ void checkForNewMonitoredProcesses(bool logNoProcessesFound) {
                     numberFound++;
                 }
             }
-//            if (logNoProcessesFound && numberFound == 0) {
-//                LogMessage msg;
-//                snprintf(msg.message, LOG_MESSAGE_LENGTH, "No '%s' processes found."
-//                        , configLines[i].programName);
-//                logToServer("Info", msg.message, false);
-//            }
+            if (logNoProcessesFound && numberFound == 0) {
+                LogMessage msg;
+                char hostname[64];
+                gethostname(hostname,64);
+                snprintf(msg.message, LOG_MESSAGE_LENGTH, "No '%s' processes found on %s"
+                        , configLines[i].programName, hostname);
+                logToServer("Info", msg.message, false);
+            }
         }
     }
 
@@ -306,7 +311,7 @@ void monitorNewProcesses(void *monitoredProcess) {
         char hostname[256];
         gethostname(hostname, 256);
         snprintf(msg.message, LOG_MESSAGE_LENGTH, "Initializing monitoring of process '%s' (PID %d) on node %s.",
-                 process->processName, process->processPid, hostname);
+                 process->processName, (int) process->processPid, hostname);
         logToServer("Info", msg.message, false);
     }
 }
@@ -405,7 +410,7 @@ void checkChild(void *childProcess) {
             char hostname[256];
             gethostname(hostname, 256);
             snprintf(msg.message, LOG_MESSAGE_LENGTH, "PID %d (%s) on %s killed after exceeding %d seconds.",
-                     child->processPid, hostname, child->processName, child->runtime);
+                     child->processPid, child->processName, hostname, child->runtime);
             logToServer("Action", msg.message, false);
         }
         child->isAvailable = true;

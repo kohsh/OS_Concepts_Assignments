@@ -210,9 +210,8 @@ void beginProcNanny() {
     /* vars */
     int serverSocket;
     int newSocket;
-    int clientSockets[32] = {0};
-    struct sockaddr_in server, client;
-    int clientLength;
+    int clientSockets[MAXCLIENTS] = {0};
+    struct sockaddr_in server;
     int max_sd;
 
     fd_set readable;
@@ -235,7 +234,7 @@ void beginProcNanny() {
     }
 
     /* Listen */
-    if (listen(serverSocket, 32) == -1) {
+    if (listen(serverSocket, MAXCLIENTS) == -1) {
         perror("Failed to listen for connections");
         return;
     }
@@ -261,10 +260,6 @@ void beginProcNanny() {
     flags |= O_NONBLOCK;
     fcntl(selfPipe[1], F_SETFL, flags);
 
-
-
-
-
     /* Accept */
 
     while (1) {
@@ -277,7 +272,7 @@ void beginProcNanny() {
             max_sd = selfPipe[0];
 
         //add child sockets to set
-        for (int i = 0 ; i < 32 ; i++)
+        for (int i = 0 ; i < MAXCLIENTS ; i++)
         {
             //socket descriptor
             int sd = clientSockets[i];
@@ -291,12 +286,11 @@ void beginProcNanny() {
                 max_sd = sd;
         }
 
-        struct timeval tv;
-        tv.tv_sec = 0;
-        tv.tv_usec = 0;
-
-//        int activity = select(max_sd + 1 , &readable , NULL , NULL , &tv);
         int activity = select(max_sd + 1 , &readable , NULL , NULL , NULL);
+
+        if (activity == -1) {
+            continue;
+        }
 
         // check the self pipe
         if (FD_ISSET(selfPipe[0], &readable)) {
@@ -307,7 +301,7 @@ void beginProcNanny() {
                 receivedSIGHUP = false;
                 readConfigurationFile();
 
-                for (int i = 0; i < 32; i++) {
+                for (int i = 0; i < MAXCLIENTS; i++) {
                     int sd = clientSockets[i];
                     if (sd == 0) {
                         continue;
@@ -333,7 +327,7 @@ void beginProcNanny() {
             if (receivedSIGINT) {
                 receivedSIGINT = false;
                 cleanUp();
-                for (int i = 0; i < 32; i++) {
+                for (int i = 0; i < MAXCLIENTS; i++) {
                     int sd = clientSockets[i];
                     char msg[] = "___KILL___ 0\n";
                     send(sd, msg, strlen(msg), 0);
@@ -344,19 +338,22 @@ void beginProcNanny() {
                          "Caught SIGINT. Exiting cleanly. %d process(es) killed.",
                          numProcessesKilled);
                 logToFile("Info", msg.message, true);
+                close(selfPipe[0]);
+                close(selfPipe[1]);
+                close(serverSocket);
                 exit(EXIT_SUCCESS);
             }
         }
 
         //If something happened on the master socket , then its an incoming connection
         else if (FD_ISSET(serverSocket, &readable)) {
-            if ((newSocket = accept(serverSocket, NULL, NULL))<0) {
+            if ((newSocket = accept(serverSocket, NULL, NULL)) < 0) {
                 printf("Error with accept");
                 exit(EXIT_FAILURE);
             }
 
             //add new socket to array of sockets
-            for (int i = 0; i < 32; i++) {
+            for (int i = 0; i < MAXCLIENTS; i++) {
                 //if position is empty
                 if( clientSockets[i] == 0 )
                 {
@@ -377,7 +374,7 @@ void beginProcNanny() {
 
         else {
             //else, we have some data to read from a child
-            for (int i = 0; i < 32; i++) {
+            for (int i = 0; i < MAXCLIENTS; i++) {
                 int sd = clientSockets[i];
                 ssize_t valread;
                 char buffer[1024];
@@ -472,6 +469,10 @@ void logToFile(const char* type, const char* msg, bool logToSTDOUT) {
 }
 
 void logToFileSimple(const char* msg) {
+    if (strstr(msg, "killed after") != NULL) {
+        numProcessesKilled++;
+    }
+
     FILE* log = fopen(logLocation, "a");
     fprintf(log, "%s", msg);
     fclose(log);
