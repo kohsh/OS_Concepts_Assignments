@@ -253,6 +253,34 @@ void beginProcNanny() {
                 max_sd = sd;
         }
 
+        if (receivedSIGHUP) {
+            receivedSIGHUP = false;
+            for (int i = 0; i < CONFIG_FILE_LINES; i++) {
+                configLines[i].runtime = 0;
+                strcpy(configLines[i].programName, "");
+            }
+            readConfigurationFile();
+            // todo : send out config to all available clients
+            LogMessage msg;
+            snprintf(msg.message, LOG_MESSAGE_LENGTH,
+                     "Caught SIGHUP. Configuration file '%s' re-read.",
+                     configFileLocation);
+            char type[] = "Info";
+            logToFile(type, msg.message, true);
+        }
+
+        if (receivedSIGINT) {
+            receivedSIGINT = false;
+            cleanUp();
+            // todo : send kill message to all sockets and close them
+            LogMessage msg;
+            snprintf(msg.message, LOG_MESSAGE_LENGTH,
+                     "Caught SIGINT. Exiting cleanly. %d process(es) killed.",
+                     numProcessesKilled);
+            logToFile("Info", msg.message, true);
+            exit(EXIT_SUCCESS);
+        }
+
         //wait for an activity on one of the sockets , timeout is NULL , so wait indefinitely
         int activity = select( max_sd + 1 , &readable , NULL , NULL , NULL);
 
@@ -324,51 +352,7 @@ void beginProcNanny() {
                 }
             }
         }
-
     }
-
-
-
-
-//    LogMessage parentMsg;
-//    snprintf(parentMsg.message, LOG_MESSAGE_LENGTH, "Parent process is PID %d.", getpid());
-//    logToFile("Info", parentMsg.message, false);
-
-//    while(true) {
-//        if (receivedSIGHUP) {
-//            receivedSIGHUP = false;
-//            for (int i = 0; i < CONFIG_FILE_LINES; i++) {
-//                configLines[i].runtime = 0;
-//                strcpy(configLines[i].programName, "");
-//            }
-//            readConfigurationFile();
-//            LogMessage msg;
-//            snprintf(msg.message, LOG_MESSAGE_LENGTH,
-//                     "Caught SIGHUP. Configuration file '%s' re-read.",
-//                     configFileLocation);
-//            char type[] = "Info";
-//            logToFile(type, msg.message, true);
-//
-//            firstConfigurationReRead = true;
-//        }
-//
-//        if (receivedSIGINT) {
-//            receivedSIGINT = false;
-//            cleanUp();
-//            LogMessage msg;
-//            snprintf(msg.message, LOG_MESSAGE_LENGTH,
-//                     "Caught SIGINT. Exiting cleanly. %d process(es) killed.",
-//                     numProcessesKilled);
-//            logToFile("Info", msg.message, true);
-//            exit(EXIT_SUCCESS);
-//        }
-//
-//        if (receivedSIGALARM) {
-//            receivedSIGALARM = false;
-//            checkForNewMonitoredProcesses(firstConfigurationReRead);
-//            alarm(REFRESH_RATE);
-//        }
-//    }
 }
 
 void cleanUp() {
