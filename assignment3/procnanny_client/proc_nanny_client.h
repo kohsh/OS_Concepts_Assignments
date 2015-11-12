@@ -67,20 +67,21 @@ typedef struct _MonitoredProcess {
 int pnMain(int argc, char* argv[]);
 
 void beginProcNanny();
+void connectToServer();
 void checkInputs(int args, char* argv[]);
-void exitError(const char* errorMessage);
 void cleanUp();
 void checkForNewMonitoredProcesses(bool logNoProcessesFound);
 void checkChild(void *childProcess);
+void exitError(const char* errorMessage);
 void getCurrentTime(char* buffer);
 void getPids(const char* processName, pid_t pids[MAX_PROCESSES]);
 void initializeChild(ChildProcess* childWorker, MonitoredProcess* processToBeMonitored);
 void killChild(void* childProcess);
 void killPid(pid_t pid);
 void killAllProcNannys();
-void logToFile(const char* type, const char* msg, bool logToSTDOUT);
+void logToServer(const char *type, const char *msg, bool logToSTDOUT);
 void monitorNewProcesses(void *monitoredProcess);
-void readConfigurationFile();
+void readConfigurationFromServer(struct timeval * tv);
 void signalHandler(int signo);
 void trimWhitespace(char* str);
 

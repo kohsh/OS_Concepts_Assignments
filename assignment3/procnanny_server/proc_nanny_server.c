@@ -272,10 +272,16 @@ void beginProcNanny() {
 
             for (int i = 0; i < 32; i++) {
                 int sd = clientSockets[i];
-                for(int i = 0; i < CONFIG_FILE_LINES; i++) {
-                    if (strlen(configLines[i].programName) != 0) {
+                if (sd == 0) {
+                    printf("not a good sd\n");
+                    fflush(stdout);
+                    continue;
+
+                }
+                for(int j = 0; j < CONFIG_FILE_LINES; j++) {
+                    if (strlen(configLines[j].programName) != 0) {
                         char buffer[1024];
-                        snprintf(buffer, 1024, "%s %d\n", configLines[i].programName, configLines[i].runtime);
+                        snprintf(buffer, 1024, "%s %d\n", configLines[j].programName, configLines[j].runtime);
                         send(newSocket, buffer, strlen(buffer), 0);
                     }
                 }
@@ -312,11 +318,6 @@ void beginProcNanny() {
 
         int activity = select( max_sd + 1 , &readable , NULL , NULL , &tv);
 
-        if ((activity < 0)) {
-            printf("Error with select");
-            exit(EXIT_FAILURE);
-        }
-
         //If something happened on the master socket , then its an incoming connection
         if (FD_ISSET(serverSocket, &readable)) {
             if ((newSocket = accept(serverSocket, NULL, NULL))<0) {
@@ -351,22 +352,18 @@ void beginProcNanny() {
         //else, we have some data to read from a child
         for (int i = 0; i < 32; i++) {
             int sd = clientSockets[i];
-            int valread;
+            ssize_t valread;
             char buffer[1024];
 
             if (FD_ISSET( sd , &readable)) {
-                // Check if it was for closing , and also read the incoming message
+                // Check if it was for closing
                 if ((valread = read( sd , buffer, 1024)) == 0) {
-                    //Somebody disconnected , get his details and print
-                    getpeername(sd , (struct sockaddr*)&client , (socklen_t*)&clientLength);
-                    //Close the socket and mark as 0 in list for reuse
                     close( sd );
                     clientSockets[i] = 0;
                 }
 
-                // log the client's message
+                // log the message
                 else {
-                    //set the string terminating NULL byte on the end of the data read
                     buffer[valread] = '\0';
                     logToFileSimple(buffer);
                 }

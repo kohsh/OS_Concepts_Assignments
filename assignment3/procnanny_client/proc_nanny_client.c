@@ -25,6 +25,9 @@
 #include <ctype.h>
 #include <time.h>
 #include <fcntl.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h>
 #include "proc_nanny_client.h"
 #include "linked_list.h"
 #include "memwatch.h"
@@ -35,41 +38,30 @@ bool receivedSIGALARM = false;
 bool firstConfigurationReRead = false;
 
 int numProcessesKilled = 0;
-char logLocation[512];
-char configFileLocation[512];
+
+int server = 0;
+int port;
+char hostname[64];
 
 ProgramConfig configLines[CONFIG_FILE_LINES];
 List monitoredProcesses;
 List childProcesses;
 
 int pnMain(int args, char* argv[]) {
-
-    if (signal(SIGHUP, &signalHandler) == SIG_ERR)
-        printf("error with catching SIGHUP\n");
-
-    if (signal(SIGINT, &signalHandler) == SIG_ERR)
-        printf("error with catching SIGINT\n");
-
     if (signal(SIGALRM, &signalHandler) == SIG_ERR)
         printf("error with setting Alarm\n");
 
     checkInputs(args, argv);
     killAllProcNannys();
-    readConfigurationFile();
+    connectToServer();
+    readConfigurationFromServer(NULL);
     beginProcNanny();
     cleanUp();
     exit(EXIT_SUCCESS);
 }
 
-void signalHandler(int signo)
-{
+void signalHandler(int signo) {
     switch (signo) {
-        case SIGINT:
-            receivedSIGINT = true;
-            break;
-        case SIGHUP:
-            receivedSIGHUP = true;
-            break;
         case SIGALRM:
             receivedSIGALARM = true;
             alarm(REFRESH_RATE);
@@ -79,9 +71,25 @@ void signalHandler(int signo)
     }
 }
 
+void checkInputs(int args, char* argv[]) {
+
+    if (args <= 2) {
+        printf("Error: Failed to provide procnanny.server hostname and port.\n");
+        exit(EXIT_FAILURE);
+    }
+    if (sscanf(argv[1], "%s", hostname) != 1) {
+        printf("Error: Failed to read given port.\n");
+        exit(EXIT_FAILURE);
+    }
+    if (sscanf(argv[2], "%d", &port) != 1) {
+        printf("Error: Failed to read given hostname.\n");
+        exit(EXIT_FAILURE);
+    }
+}
+
 void killAllProcNannys() {
     pid_t pids[MAX_PROCESSES] = {-1};
-    getPids("procnanny", pids);
+    getPids("procnanny.client", pids);
     for(int i = 0; i < MAX_PROCESSES; i++) {
         if (pids[i] > 0 && pids[i] != getpid()) {
             if(kill(pids[i], 0) == 0) {
@@ -91,81 +99,86 @@ void killAllProcNannys() {
     }
 }
 
-void readConfigurationFile() {
-    FILE * fp;
-    char * line = NULL;
-    size_t len = 0;
-    ssize_t charsRead;
+void connectToServer() {
+    struct sockaddr_in serverDetails;
+    struct hostent *host;
 
-    fp = fopen(configFileLocation, "r");
-    if (fp == NULL) {
-        logToFile("Error", "Could not read configuration file.", true);
+    host = gethostbyname(hostname);
+
+    if (host == NULL) {
+        printf("Error: failed to resolve hostname.");
         exit(EXIT_FAILURE);
     }
 
-    int index = 0;
+    server = socket(AF_INET, SOCK_STREAM, 0);
 
-    while ((charsRead = getline(&line, &len, fp)) != -1) {
-        char tempBuff[512];
-        strncpy(tempBuff, line, (size_t) charsRead);
-        int numMatched = sscanf(tempBuff, "%s %d", configLines[index].programName, &configLines[index].runtime);
-        if (numMatched != 2) {
-            LogMessage msg;
-            snprintf(msg.message, LOG_MESSAGE_LENGTH,
-                     "Expected two configuration arguments at line %d of %s.",
-                     index, configFileLocation);
-            logToFile("Error", msg.message, false);
-            cleanUp();
-            exit(EXIT_FAILURE);
-        }
-        trimWhitespace(configLines[index].programName);
-        index++;
+    if (server < 0) {
+        printf("Error: failed to intitialize server socket connection. ");
+        exit(EXIT_FAILURE);
     }
-    fclose(fp);
+
+    bzero((char *) &serverDetails, sizeof(serverDetails));
+
+    serverDetails.sin_family = AF_INET;
+    bcopy(host->h_addr, (char *) &serverDetails.sin_addr, (size_t) host->h_length);
+    serverDetails.sin_port = htons((uint16_t) port);
+    if (connect(server, (struct sockaddr *) &serverDetails, sizeof(serverDetails)) < 0) {
+        printf("Error: failed to connect to server.");
+        exit(EXIT_FAILURE);
+    }
+}
+
+void readConfigurationFromServer(struct timeval * tv) {
+    fd_set readable;
+    FD_ZERO(&readable);
+    FD_SET(server, &readable);
+    int max_sd = server;
+
+    int activity = select( max_sd + 1 , &readable , NULL , NULL , tv);
+
+    if (FD_ISSET(server, &readable)) {
+        for (int i = 0; i < CONFIG_FILE_LINES; i++) {
+            configLines[i].runtime = 0;
+            strcpy(configLines[i].programName, "");
+        }
+
+        char buff[2048];
+        read(server, buff, 2048);
+        int charsRead = 0;
+        char program[64];
+        unsigned int runtime;
+        int extra;
+        int i =0;
+        printf("hellooo\n");
+        fflush(stdout);
+        while(0 < sscanf(buff + charsRead, "%s %d\n%n", program, &runtime, &extra)) {
+            if (strcmp(program, "___KILL___") == 0) {
+                cleanUp();
+            }
+            strcpy(configLines[i].programName, program);
+            configLines[i].runtime = runtime;
+            i++;
+            charsRead += extra;
+        }
+
+    }
 }
 
 void beginProcNanny() {
-    LogMessage parentMsg;
-    snprintf(parentMsg.message, LOG_MESSAGE_LENGTH, "Parent process is PID %d.", getpid());
-    logToFile("Info", parentMsg.message, false);
-
     ll_init(&monitoredProcesses, sizeof(MonitoredProcess), &monitoredProcessComparator);
     ll_init(&childProcesses, sizeof(ChildProcess), NULL);
-    firstConfigurationReRead = true;
+    firstConfigurationReRead = false;
     checkForNewMonitoredProcesses(firstConfigurationReRead);
     alarm(REFRESH_RATE);
+
+    struct timeval tv;
+    tv.tv_sec = 1;
+    tv.tv_usec = 0;
 
     while(true) {
         ll_forEach(&monitoredProcesses, &monitorNewProcesses);
         ll_forEach(&childProcesses, &checkChild);
-
-        if (receivedSIGHUP) {
-            receivedSIGHUP = false;
-            for (int i = 0; i < CONFIG_FILE_LINES; i++) {
-                configLines[i].runtime = 0;
-                strcpy(configLines[i].programName, "");
-            }
-            readConfigurationFile();
-            LogMessage msg;
-            snprintf(msg.message, LOG_MESSAGE_LENGTH,
-                     "Caught SIGHUP. Configuration file '%s' re-read.",
-                     configFileLocation);
-            char type[] = "Info";
-            logToFile(type, msg.message, true);
-
-            firstConfigurationReRead = true;
-        }
-
-        if (receivedSIGINT) {
-            receivedSIGINT = false;
-            cleanUp();
-            LogMessage msg;
-            snprintf(msg.message, LOG_MESSAGE_LENGTH,
-                     "Caught SIGINT. Exiting cleanly. %d process(es) killed.",
-                     numProcessesKilled);
-            logToFile("Info", msg.message, true);
-            exit(EXIT_SUCCESS);
-        }
+        //readConfigurationFromServer(&tv);
 
         if (receivedSIGALARM) {
             receivedSIGALARM = false;
@@ -179,6 +192,7 @@ void cleanUp() {
     ll_forEach(&childProcesses, &killChild);
     ll_free(&monitoredProcesses);
     ll_free(&childProcesses);
+    close(server);
 }
 
 void exitError(const char *errorMessage) {
@@ -231,54 +245,7 @@ void getCurrentTime(char *buffer) {
     trimWhitespace(buffer);
 }
 
-void checkInputs(int args, char* argv[]) {
-    char * temp = getenv("PROCNANNYLOGS");
 
-    if (temp == NULL) {
-        snprintf(logLocation, 512, "./procnanny.log");
-        char timebuffer[TIME_BUFFER_SIZE];
-        getCurrentTime(timebuffer);
-        LogMessage logMsg;
-        snprintf(logMsg.message, LOG_MESSAGE_LENGTH,
-                 "[%s] Error: Environment variable 'PROCNANNYLOGS' not specified.\n",
-                 timebuffer);
-        FILE* log = fopen(logLocation, "a");
-        fprintf(log, "%s", logMsg.message);
-        fclose(log);
-    }
-    else {
-        snprintf(logLocation, 512, "%s", temp);
-    }
-
-    if (args <= 1) {
-        char timebuffer[TIME_BUFFER_SIZE];
-        getCurrentTime(timebuffer);
-        LogMessage logMsg;
-        snprintf(logMsg.message, LOG_MESSAGE_LENGTH,
-                 "[%s] Error: procnanny configuration file not provided as argument.\n",
-                 timebuffer);
-        FILE* log = fopen(logLocation, "a");
-        fprintf(log, "%s", logMsg.message);
-        fclose(log);
-        exit(EXIT_FAILURE);
-    }
-
-    if (access(argv[1], R_OK) == -1) {
-        char timebuffer[TIME_BUFFER_SIZE];
-        getCurrentTime(timebuffer);
-        LogMessage logMsg;
-        snprintf(logMsg.message, LOG_MESSAGE_LENGTH,
-                 "[%s] Error: Unable to read from configuration file (%s).\n",
-                 timebuffer, argv[1]);
-        FILE* log = fopen(logLocation, "a");
-        fprintf(log, "%s", logMsg.message);
-        fclose(log);
-        exit(EXIT_FAILURE);
-    }
-
-    // cache the location of the configuration file
-    strncpy(configFileLocation, argv[1], 512);
-}
 
 void killPid(pid_t pid) {
     char buff[256];
@@ -314,12 +281,12 @@ void checkForNewMonitoredProcesses(bool logNoProcessesFound) {
                     numberFound++;
                 }
             }
-            if (logNoProcessesFound && numberFound == 0) {
-                LogMessage msg;
-                snprintf(msg.message, LOG_MESSAGE_LENGTH, "No '%s' processes found."
-                        , configLines[i].programName);
-                logToFile("Info", msg.message, false);
-            }
+//            if (logNoProcessesFound && numberFound == 0) {
+//                LogMessage msg;
+//                snprintf(msg.message, LOG_MESSAGE_LENGTH, "No '%s' processes found."
+//                        , configLines[i].programName);
+//                logToServer("Info", msg.message, false);
+//            }
         }
     }
 
@@ -335,9 +302,11 @@ void monitorNewProcesses(void *monitoredProcess) {
         }
         initializeChild(worker, process);
         LogMessage msg;
-        snprintf(msg.message, LOG_MESSAGE_LENGTH, "Initializing monitoring of process '%s' (PID %d).",
-                 process->processName, process->processPid);
-        logToFile("Info", msg.message, false);
+        char hostname[256];
+        gethostname(hostname, 256);
+        snprintf(msg.message, LOG_MESSAGE_LENGTH, "Initializing monitoring of process '%s' (PID %d) on node %s.",
+                 process->processName, process->processPid, hostname);
+        logToServer("Info", msg.message, false);
     }
 }
 
@@ -375,6 +344,7 @@ ChildProcess *spawnNewChildWorker() {
             close(worker.toParent.readWrite[READ_PIPE]);
             ll_free(&monitoredProcesses);
             ll_free(&childProcesses);
+            close(server);
             while(true) {
                 FILE* fromParent = fdopen(worker.toChild.readWrite[READ_PIPE], "r");
                 char command[255];
@@ -431,9 +401,11 @@ void checkChild(void *childProcess) {
         if (numKilled != 0) {
             numProcessesKilled+=numKilled;
             LogMessage msg;
-            snprintf(msg.message, LOG_MESSAGE_LENGTH, "PID %d (%s) killed after exceeding %d seconds.",
-                     child->processPid, child->processName, child->runtime);
-            logToFile("Action", msg.message, false);
+            char hostname[256];
+            gethostname(hostname, 256);
+            snprintf(msg.message, LOG_MESSAGE_LENGTH, "PID %d (%s) on %s killed after exceeding %d seconds.",
+                     child->processPid, hostname, child->processName, child->runtime);
+            logToServer("Action", msg.message, false);
         }
         child->isAvailable = true;
         MonitoredProcess temp;
@@ -447,19 +419,14 @@ void killChild(void *childProcess) {
     killPid(child->childPid);
 }
 
-void logToFile(const char* type, const char* msg, bool logToSTDOUT) {
+void logToServer(const char *type, const char *msg, bool logToSTDOUT) {
     char timebuffer[TIME_BUFFER_SIZE];
     getCurrentTime(timebuffer);
     LogMessage logMsg;
     snprintf(logMsg.message, LOG_MESSAGE_LENGTH,
              "[%s] %s: %s\n",
              timebuffer, type, msg);
-
-    FILE* log = fopen(logLocation, "a");
-    fprintf(log, "%s", logMsg.message);
-    fclose(log);
-
-    if (logToSTDOUT == true) {
-        printf("%s", logMsg.message);
-    }
+    send(server, logMsg.message, LOG_MESSAGE_LENGTH, 0);
 }
+
+
