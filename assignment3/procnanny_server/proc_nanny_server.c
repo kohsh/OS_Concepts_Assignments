@@ -25,28 +25,22 @@
 #include <ctype.h>
 #include <time.h>
 #include <netinet/in.h>
-#include <bits/errno.h>
-#include <asm-generic/errno-base.h>
 #include <fcntl.h>
 #include "proc_nanny_server.h"
-#include "linked_list.h"
 #include "memwatch.h"
 
 bool receivedSIGHUP = false;
 bool receivedSIGINT = false;
-bool receivedSIGALARM = false;
-bool firstConfigurationReRead = false;
-
-int numProcessesKilled = 0;
-
-int selfPipe[2];
 
 char logLocation[512];
 char serverInfoLocation[512];
 char configFileLocation[512];
 
+int numProcessesKilled = 0;
+
+int selfPipe[2];
+
 ProgramConfig configLines[CONFIG_FILE_LINES];
-List connections;
 
 int pnMain(int args, char* argv[]) {
 
@@ -74,10 +68,6 @@ void signalHandler(int signo) {
             break;
         case SIGHUP:
             receivedSIGHUP = true;
-            break;
-        case SIGALRM:
-            receivedSIGALARM = true;
-            alarm(REFRESH_RATE);
             break;
         default:
             break;
@@ -168,8 +158,6 @@ void readConfigurationFile() {
     FILE * fp;
     char * line = NULL;
     size_t len = 0;
-    ssize_t charsRead;
-
     fp = fopen(configFileLocation, "r");
     if (fp == NULL) {
         logToFile("Error", "Could not read configuration file.", true);
@@ -183,7 +171,7 @@ void readConfigurationFile() {
         strcpy(configLines[i].programName, "");
     }
 
-    while ((charsRead = getline(&line, &len, fp)) != -1) {
+    while (getline(&line, &len, fp) != -1) {
         int numMatched = sscanf(line, "%s %d", configLines[index].programName, &configLines[index].runtime);
         if (numMatched == 1 || numMatched > 2) {
             LogMessage msg;
@@ -206,8 +194,6 @@ void readConfigurationFile() {
 }
 
 void beginProcNanny() {
-
-    /* vars */
     int serverSocket;
     int newSocket;
     int clientSockets[MAXCLIENTS] = {0};
@@ -220,48 +206,47 @@ void beginProcNanny() {
     server.sin_addr.s_addr = INADDR_ANY;
     server.sin_port = htons(PORT);
 
-    /* Create Socket */
+    // Create Socket
     serverSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (serverSocket < 0) {
         perror("Failed to create master socket");
         return;
     }
 
-    /* Call Bind */
+    // Bind
     if (bind(serverSocket, (struct sockaddr *) &server, sizeof(server)) < 0) {
         perror("Failed to bind master socket");
         return;
     }
 
-    /* Listen */
+    // Listen
     if (listen(serverSocket, MAXCLIENTS) == -1) {
         perror("Failed to listen for connections");
         return;
     }
 
+    // write server information to log and to stdout
     LogMessage msg;
     char name[64];
     gethostname(name, 64);
     snprintf(msg.message, LOG_MESSAGE_LENGTH, "PID %d on node %s, port %d", getpid(), name, PORT);
     logToFile("procnanny server", msg.message, true);
 
+    // write server information to PROCNANNYSERVERINFO
     FILE* log = fopen(serverInfoLocation, "w");
     fprintf(log, "NODE %s PID %d PORT %d\n", name, getpid(), PORT);
     fclose(log);
 
-    // setup self pipe
+    // setup self pipe and have no blocking
     pipe(selfPipe);
-
     int flags = fcntl(selfPipe[0], F_GETFL);
     flags |= O_NONBLOCK;
     fcntl(selfPipe[0], F_SETFL, flags);
-
     flags = fcntl(selfPipe[1], F_GETFL);
     flags |= O_NONBLOCK;
     fcntl(selfPipe[1], F_SETFL, flags);
 
-    /* Accept */
-
+    // Accept
     while (1) {
         FD_ZERO(&readable);
         FD_SET(serverSocket, &readable);
@@ -274,16 +259,14 @@ void beginProcNanny() {
         //add child sockets to set
         for (int i = 0 ; i < MAXCLIENTS ; i++)
         {
-            //socket descriptor
             int sd = clientSockets[i];
+            if(sd > 0) {
+                FD_SET(sd, &readable);
+            }
 
-            //if valid socket descriptor then add to read list
-            if(sd > 0)
-                FD_SET( sd , &readable);
-
-            //highest file descriptor number, need it for the select function
-            if(sd > max_sd)
+            if(sd > max_sd) {
                 max_sd = sd;
+            }
         }
 
         int activity = select(max_sd + 1 , &readable , NULL , NULL , NULL);
@@ -292,7 +275,7 @@ void beginProcNanny() {
             continue;
         }
 
-        // check the self pipe
+        // check the self pipe trick
         if (FD_ISSET(selfPipe[0], &readable)) {
             char ch;
             while(read(selfPipe[0], &ch, 1) != -1) {}
@@ -345,24 +328,22 @@ void beginProcNanny() {
             }
         }
 
-        //If something happened on the master socket , then its an incoming connection
+        // Check for new connections
         else if (FD_ISSET(serverSocket, &readable)) {
             if ((newSocket = accept(serverSocket, NULL, NULL)) < 0) {
                 printf("Error with accept");
                 exit(EXIT_FAILURE);
             }
 
-            //add new socket to array of sockets
+            //add new socket
             for (int i = 0; i < MAXCLIENTS; i++) {
-                //if position is empty
-                if( clientSockets[i] == 0 )
-                {
+                if( clientSockets[i] == 0 ) {
                     clientSockets[i] = newSocket;
                     break;
                 }
             }
 
-            // send the program configuration
+            // send the program configuration to the client
             for(int i = 0; i < CONFIG_FILE_LINES; i++) {
                 if (strlen(configLines[i].programName) != 0) {
                     char buffer[1024];
@@ -373,14 +354,14 @@ void beginProcNanny() {
         }
 
         else {
-            //else, we have some data to read from a child
+            //read data from the client
             for (int i = 0; i < MAXCLIENTS; i++) {
                 int sd = clientSockets[i];
                 ssize_t valread;
                 char buffer[1024];
 
                 if (FD_ISSET(sd, &readable)) {
-                    // Check if it was for closing
+                    // Check if client socket is closing
                     if ((valread = read(sd, buffer, 1024)) == 0) {
                         close(sd);
                         clientSockets[i] = 0;

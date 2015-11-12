@@ -32,8 +32,6 @@
 #include "linked_list.h"
 #include "memwatch.h"
 
-bool receivedSIGHUP = false;
-bool receivedSIGINT = false;
 bool receivedSIGALARM = false;
 bool firstConfigurationReRead = false;
 
@@ -72,7 +70,6 @@ void signalHandler(int signo) {
 }
 
 void checkInputs(int args, char* argv[]) {
-
     if (args <= 2) {
         printf("Error: Failed to provide procnanny.server hostname and port.\n");
         exit(EXIT_FAILURE);
@@ -113,7 +110,7 @@ void connectToServer() {
     server = socket(AF_INET, SOCK_STREAM, 0);
 
     if (server < 0) {
-        printf("Error: failed to intitialize server socket connection. ");
+        printf("Error: failed to intitialize server socket connection.");
         exit(EXIT_FAILURE);
     }
 
@@ -249,8 +246,6 @@ void getCurrentTime(char *buffer) {
     trimWhitespace(buffer);
 }
 
-
-
 void killPid(pid_t pid) {
     char buff[256];
     snprintf(buff, 256, "kill -9 %d > /dev/null", pid);
@@ -291,7 +286,7 @@ void checkForNewMonitoredProcesses(bool logNoProcessesFound) {
                 gethostname(hostname,64);
                 snprintf(msg.message, LOG_MESSAGE_LENGTH, "No '%s' processes found on %s"
                         , configLines[i].programName, hostname);
-                logToServer("Info", msg.message, false);
+                logToServer("Info", msg.message);
             }
         }
     }
@@ -312,7 +307,7 @@ void monitorNewProcesses(void *monitoredProcess) {
         gethostname(hostname, 256);
         snprintf(msg.message, LOG_MESSAGE_LENGTH, "Initializing monitoring of process '%s' (PID %d) on node %s.",
                  process->processName, (int) process->processPid, hostname);
-        logToServer("Info", msg.message, false);
+        logToServer("Info", msg.message);
     }
 }
 
@@ -376,7 +371,6 @@ ChildProcess *spawnNewChildWorker() {
                 fclose(fromParent);
                 exit(EXIT_SUCCESS);
             }
-            break;
         default:    //Parent
             break;
     }
@@ -411,7 +405,7 @@ void checkChild(void *childProcess) {
             gethostname(hostname, 256);
             snprintf(msg.message, LOG_MESSAGE_LENGTH, "PID %d (%s) on %s killed after exceeding %d seconds.",
                      child->processPid, child->processName, hostname, child->runtime);
-            logToServer("Action", msg.message, false);
+            logToServer("Action", msg.message);
         }
         child->isAvailable = true;
         MonitoredProcess temp;
@@ -425,7 +419,7 @@ void killChild(void *childProcess) {
     killPid(child->childPid);
 }
 
-void logToServer(const char *type, const char *msg, bool logToSTDOUT) {
+void logToServer(const char *type, const char *msg) {
     char timebuffer[TIME_BUFFER_SIZE];
     getCurrentTime(timebuffer);
     LogMessage logMsg;

@@ -81,7 +81,7 @@ void initializeChild(ChildProcess* childWorker, MonitoredProcess* processToBeMon
 void killChild(void* childProcess);
 void killPid(pid_t pid);
 void killAllProcNannys();
-void logToServer(const char *type, const char *msg, bool logToSTDOUT);
+void logToServer(const char *type, const char *msg);
 void monitorNewProcesses(void *monitoredProcess);
 void readConfigurationFromServer(struct timeval * tv);
 void signalHandler(int signo);
