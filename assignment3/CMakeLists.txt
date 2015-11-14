@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.3)
-project(procnanny.server)
+project(procnanny)
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c99 -Wall -DMEMWATCH -DMW_STDIO")
 
@@ -21,4 +21,4 @@ set(SOURCE_FILES_CLIENT
 
 add_executable(procnanny.server ${SOURCE_FILES_SERVER})
 
-add_executable(procanny.client ${SOURCE_FILES_CLIENT})
+add_executable(procnanny.client ${SOURCE_FILES_CLIENT})
