@@ -66,7 +66,6 @@ typedef struct _MonitoredProcess {
 } MonitoredProcess;
 
 
-int pnMain(int argc, char* argv[]);
 
 void beginProcNanny();
 void connectToServer();

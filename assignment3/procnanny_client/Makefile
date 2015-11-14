@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS  = -std=c99 -Wall -DMEMWATCH -DMW_STDIO
-SRCS = main.c memwatch.c proc_nanny_client.c linked_list.c
+SRCS = memwatch.c proc_nanny_client.c linked_list.c
 INCLUDES = memwatch.h proc_nanny_client.h linked_list.h
 
 all: procnanny.client
@@ -24,4 +24,4 @@ testLong: test.c
 	gcc -o testLong test.c
 
 tar:
-	tar cfv submit.tar README.md Makefile main.c proc_nanny_client.c proc_nanny_client.h linked_list.c linked_list.h
+	tar cfv submit.tar README.md Makefile proc_nanny_client.c proc_nanny_client.h linked_list.c linked_list.h

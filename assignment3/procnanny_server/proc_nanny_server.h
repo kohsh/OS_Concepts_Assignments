@@ -40,8 +40,6 @@ typedef struct _ProgramConfig {
     unsigned int runtime;
 } ProgramConfig;
 
-int pnMain(int argc, char* argv[]);
-
 void beginProcNanny();
 void checkInputs(int args, char* argv[]);
 void cleanUp();

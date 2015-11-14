@@ -45,7 +45,7 @@ ProgramConfig configLines[CONFIG_FILE_LINES];
 List monitoredProcesses;
 List childProcesses;
 
-int pnMain(int args, char* argv[]) {
+int main(int args, char* argv[]) {
     if (signal(SIGALRM, &signalHandler) == SIG_ERR)
         printf("error with setting Alarm\n");
 

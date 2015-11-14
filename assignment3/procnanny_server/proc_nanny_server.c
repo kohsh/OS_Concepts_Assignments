@@ -42,7 +42,7 @@ int selfPipe[2];
 
 ProgramConfig configLines[CONFIG_FILE_LINES];
 
-int pnMain(int args, char* argv[]) {
+int main(int args, char* argv[]) {
 
     if (signal(SIGHUP, &signalHandler) == SIG_ERR)
         printf("error with catching SIGHUP\n");
