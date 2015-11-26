@@ -26,7 +26,9 @@
 #include <time.h>
 #include <netinet/in.h>
 #include <fcntl.h>
+#include <netdb.h>
 #include "proc_nanny_server.h"
+#include "linked_list.h"
 #include "memwatch.h"
 
 bool receivedSIGHUP = false;
@@ -50,8 +52,6 @@ int main(int args, char* argv[]) {
     if (signal(SIGINT, &signalHandler) == SIG_ERR)
         printf("error with catching SIGINT\n");
 
-    if (signal(SIGALRM, &signalHandler) == SIG_ERR)
-        printf("error with setting Alarm\n");
 
     checkInputs(args, argv);
     killAllProcNannys();
@@ -194,6 +194,7 @@ void readConfigurationFile() {
 }
 
 void beginProcNanny() {
+    List clientNames;
     int serverSocket;
     int newSocket;
     int clientSockets[MAXCLIENTS] = {0};
@@ -245,6 +246,8 @@ void beginProcNanny() {
     flags = fcntl(selfPipe[1], F_GETFL);
     flags |= O_NONBLOCK;
     fcntl(selfPipe[1], F_SETFL, flags);
+
+    ll_init(&clientNames, sizeof(ClientName), NULL);
 
     // Accept
     while (1) {
@@ -310,6 +313,7 @@ void beginProcNanny() {
             if (receivedSIGINT) {
                 receivedSIGINT = false;
                 cleanUp();
+                ll_free(&clientNames);
                 for (int i = 0; i < MAXCLIENTS; i++) {
                     int sd = clientSockets[i];
                     char msg[] = "___KILL___ 0\n";
@@ -330,10 +334,17 @@ void beginProcNanny() {
 
         // Check for new connections
         else if (FD_ISSET(serverSocket, &readable)) {
-            if ((newSocket = accept(serverSocket, NULL, NULL)) < 0) {
+            struct sockaddr_in client;
+            socklen_t len = sizeof(client);
+            if ((newSocket = accept(serverSocket, (struct sockaddr*)&client, &len)) < 0) {
                 printf("Error with accept");
                 exit(EXIT_FAILURE);
             }
+
+            struct hostent* host = gethostbyaddr((const void*)&client.sin_addr, sizeof(struct in_addr), AF_INET);
+            ClientName name;
+            strncpy(name.name, host->h_name, strlen(host->h_name));
+            ll_add(&clientNames, &name);
 
             //add new socket
             for (int i = 0; i < MAXCLIENTS; i++) {

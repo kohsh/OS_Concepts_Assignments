@@ -40,6 +40,10 @@ typedef struct _ProgramConfig {
     unsigned int runtime;
 } ProgramConfig;
 
+typedef struct _ClientName {
+    char name[128];
+} ClientName;
+
 void beginProcNanny();
 void checkInputs(int args, char* argv[]);
 void cleanUp();

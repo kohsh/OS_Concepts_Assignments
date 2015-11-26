@@ -32,7 +32,6 @@
 #include "linked_list.h"
 #include "memwatch.h"
 
-bool receivedSIGALARM = false;
 bool firstConfigurationReRead = false;
 
 int numProcessesKilled = 0;
@@ -46,9 +45,6 @@ List monitoredProcesses;
 List childProcesses;
 
 int main(int args, char* argv[]) {
-    if (signal(SIGALRM, &signalHandler) == SIG_ERR)
-        printf("error with setting Alarm\n");
-
     checkInputs(args, argv);
     killAllProcNannys();
     connectToServer();
@@ -56,17 +52,6 @@ int main(int args, char* argv[]) {
     beginProcNanny();
     cleanUp();
     exit(EXIT_SUCCESS);
-}
-
-void signalHandler(int signo) {
-    switch (signo) {
-        case SIGALRM:
-            receivedSIGALARM = true;
-            alarm(REFRESH_RATE);
-            break;
-        default:
-            break;
-    }
 }
 
 void checkInputs(int args, char* argv[]) {
@@ -170,7 +155,6 @@ void beginProcNanny() {
     ll_init(&childProcesses, sizeof(ChildProcess), NULL);
     firstConfigurationReRead = true;
     checkForNewMonitoredProcesses(firstConfigurationReRead);
-    alarm(REFRESH_RATE);
 
     struct timeval tv;
     tv.tv_sec = 0;
@@ -180,12 +164,7 @@ void beginProcNanny() {
         ll_forEach(&monitoredProcesses, &monitorNewProcesses);
         ll_forEach(&childProcesses, &checkChild);
         readConfigurationFromServer(&tv);
-
-        if (receivedSIGALARM) {
-            receivedSIGALARM = false;
-            checkForNewMonitoredProcesses(firstConfigurationReRead);
-            alarm(REFRESH_RATE);
-        }
+        checkForNewMonitoredProcesses(firstConfigurationReRead);
     }
 }
 
@@ -233,7 +212,6 @@ void getPids(const char *processName, pid_t pids[MAX_PROCESSES]) {
         pids[index] = (pid_t) atoi(line);
         index++;
     }
-
     pclose(pgrepOutput);
 }
 

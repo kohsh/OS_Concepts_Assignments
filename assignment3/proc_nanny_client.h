@@ -83,7 +83,6 @@ void killAllProcNannys();
 void logToServer(const char *type, const char *msg);
 void monitorNewProcesses(void *monitoredProcess);
 void readConfigurationFromServer(struct timeval * tv);
-void signalHandler(int signo);
 void trimWhitespace(char* str);
 
 bool monitoredProcessComparator(void *mp1, void *mp2);
