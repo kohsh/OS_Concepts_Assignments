@@ -198,7 +198,7 @@ void trimWhitespace(char *str) {
 
 void getPids(const char *processName, pid_t pids[MAX_PROCESSES]) {
     char command[512];
-    snprintf(command, 511, "pgrep -x '%s'", processName);
+    snprintf(command, 511, "pidof %s", processName);
     FILE* pgrepOutput = popen(command, "r");
 
     char * line = NULL;
@@ -207,10 +207,13 @@ void getPids(const char *processName, pid_t pids[MAX_PROCESSES]) {
         return;
 
     int index = 0;
-
-    while (getline(&line, &len, pgrepOutput) != -1) {
-        pids[index] = (pid_t) atoi(line);
-        index++;
+    if (getline(&line, &len, pgrepOutput) != -1) {
+        char *pch = strtok(line, " ,.-");
+        while (pch != NULL) {
+            pids[index] = (pid_t) atoi(pch);
+            pch = strtok(NULL, " ");
+            index += 1;
+        }
     }
     pclose(pgrepOutput);
 }
