@@ -426,7 +426,7 @@ void logToServer(const char *type, const char *msg) {
     snprintf(logMsg.message, LOG_MESSAGE_LENGTH,
              "[%s] %s: %s\n",
              timebuffer, type, msg);
-    send(server, logMsg.message, LOG_MESSAGE_LENGTH, 0);
+    send(server, logMsg.message, strlen(logMsg.message), 0);
 }
 
 
