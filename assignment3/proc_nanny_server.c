@@ -55,6 +55,7 @@ int main(int args, char* argv[]) {
 
     checkInputs(args, argv);
     killAllProcNannys();
+    sleep(1);
     readConfigurationFile();
     beginProcNanny();
     cleanUp();
@@ -231,7 +232,7 @@ void beginProcNanny() {
     char name[64];
     gethostname(name, 64);
     snprintf(msg.message, LOG_MESSAGE_LENGTH, "PID %d on node %s, port %d", getpid(), name, PORT);
-    logToFile("procnanny server", msg.message, true);
+    logToFile("procnanny server", msg.message, false);
 
     // write server information to PROCNANNYSERVERINFO
     FILE* log = fopen(serverInfoLocation, "w");
