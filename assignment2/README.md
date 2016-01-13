@@ -1,11 +1,5 @@
 #CMPUT 379 Assignment 2  
-Name: Kyle O'Shaughnessy  
-Student Number: 1369008  
-Unix ID: koshaugh  
-Lecture Section: EA1 Fa15  
-Instructor: Paul Lu  
-Lab Section: ED03  
-TA: Marcus Karpoff  
+Name: Kyle O'Shaughnessy
   
 #About  
 * `procnanny` represents a dumbed down "task manager" of sorts that is used to showcase UNIX Operating System concepts such as `fork`, `kill`, and `pipe`.  
