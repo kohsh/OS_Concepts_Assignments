@@ -1,4 +1,4 @@
-#CMPUT 379 Assignment 1  
+Assignment 1  
 Name: Kyle O'Shaughnessy
   
 #About  
